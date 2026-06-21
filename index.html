@@ -11,6 +11,15 @@
 <link rel="manifest" href="manifest.json">
 <title>LinkMap</title>
 <link rel="stylesheet" href="style.css">
+<script>
+(function(){
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const isFrame  = window.self !== window.top;
+  if(!isMobile && !isFrame){
+    window.location.replace('desktop.html');
+  }
+})();
+</script>
 <style>
 /* ─── 로그인 전용 ─────────────────────────────────────────────── */
 html { height:100%; }

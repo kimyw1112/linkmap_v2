@@ -10,6 +10,17 @@
 <link rel="manifest" href="manifest.json">
 <title>LinkMap</title>
 <link rel="stylesheet" href="style.css">
+<script>
+/* PC에서 직접 app.html 접근 시 desktop.html로 리다이렉트
+   iframe 안에서 열린 경우(window.self !== window.top)는 그대로 유지 */
+(function(){
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  const isFrame  = window.self !== window.top;
+  if(!isMobile && !isFrame){
+    window.location.replace('desktop.html');
+  }
+})();
+</script>
 </head>
 <body>
 <div id="app">
@@ -27,10 +38,10 @@
   <div class="hdr">
     <div class="logo"><div class="logo-mark">🔗</div>LinkMap</div>
     <div class="hdr-right">
-      <button class="hbtn" id="btnPush"    title="푸시 알림 설정">🔔</button>
-      <button class="hbtn" id="btnExport" title="백업">⬇</button>
-      <button class="hbtn" id="btnImport" title="복원">⬆</button>
-      <button class="hbtn" id="btnSetting" title="설정">⚙</button>
+      <button class="hbtn" id="btnPush"    title="푸시 알림 설정"><span class="hbtn-ic">🔔</span><span class="hbtn-lb">알림</span></button>
+      <button class="hbtn" id="btnExport"  title="백업"><span class="hbtn-ic">⬇</span><span class="hbtn-lb">백업</span></button>
+      <button class="hbtn" id="btnImport"  title="복원"><span class="hbtn-ic">⬆</span><span class="hbtn-lb">복원</span></button>
+      <button class="hbtn" id="btnSetting" title="설정"><span class="hbtn-ic">⚙</span><span class="hbtn-lb">설정</span></button>
     </div>
   </div>
   <input type="file" id="fileIn" accept=".json" style="display:none">
@@ -132,11 +143,12 @@
 
   <!-- ─── 샘플 튜토리얼 가이드 오버레이 (샘플 체험 시) ─── -->
   <div id="guideOverlay" style="display:none">
-    <div class="guide-backdrop"></div>
+    <div class="guide-backdrop" onclick="guideExit()"></div>
 
     <!-- 가이드 1: 오늘 할 일 탭 -->
     <div class="guide-step" id="guideStep1">
       <div class="guide-highlight guide-hl-today"></div>
+      <div class="guide-skip-btn" onclick="guideExit()">건너뛰기</div>
       <div class="guide-bubble guide-bubble-bottom">
         <div class="guide-bubble-ic">📋</div>
         <div class="guide-bubble-title">오늘 할 일 탭</div>
@@ -149,6 +161,7 @@
     <!-- 가이드 2: 상세 시트 소개 요청 -->
     <div class="guide-step hide" id="guideStep2">
       <div class="guide-highlight guide-hl-detail"></div>
+      <div class="guide-skip-btn" onclick="guideExit()">건너뛰기</div>
       <div class="guide-bubble guide-bubble-center">
         <div class="guide-bubble-ic">🤝</div>
         <div class="guide-bubble-title">소개 요청 결과 기록</div>
@@ -164,6 +177,7 @@
     <!-- 가이드 3: 연결망 탭 -->
     <div class="guide-step hide" id="guideStep3">
       <div class="guide-highlight guide-hl-map"></div>
+      <div class="guide-skip-btn" onclick="guideExit()">건너뛰기</div>
       <div class="guide-bubble guide-bubble-top">
         <div class="guide-bubble-ic">🔗</div>
         <div class="guide-bubble-title">소개 연결망</div>
@@ -186,6 +200,22 @@
           ✅ 샘플 삭제하고 시작하기
         </button>
         <button class="guide-back-btn2" onclick="guideGoTo(3)">← 이전으로</button>
+      </div>
+    </div>
+
+    <!-- 샘플 처리 선택 모달 (건너뛰기 / backdrop 탭 시) -->
+    <div class="guide-exit-modal hide" id="guideExitModal">
+      <div class="guide-exit-card">
+        <div class="guide-exit-ic">🗂</div>
+        <div class="guide-exit-title">샘플 데이터를 어떻게 할까요?</div>
+        <div class="guide-exit-desc">가이드를 나갑니다.<br>샘플 데이터가 남아 있으면 실제 고객과 섞일 수 있어요.</div>
+        <button class="guide-start-btn" onclick="finishGuide()">
+          🗑 샘플 삭제하고 시작하기
+        </button>
+        <button class="guide-keep-btn" onclick="guideKeepSample()">
+          👀 샘플 유지하고 계속 둘러보기
+        </button>
+        <button class="guide-back-btn2" onclick="guideExitCancel()">← 가이드로 돌아가기</button>
       </div>
     </div>
 
@@ -429,6 +459,61 @@
     <div class="field"><label>메모</label><textarea id="sMemo" placeholder="장소, 안건 등 메모"></textarea></div>
     <div class="hint-warn">⚠ 주민번호·연락처·계약금액 등 민감정보는 입력하지 마세요</div>
     <button class="btn btn-primary" id="btnSchedSave">저장하기</button>
+  </div>
+</div>
+
+<!-- 설정 시트 -->
+<div class="sheet" id="shSetting">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3>⚙ 설정</h3>
+    <button class="icon-btn" onclick="closeSheet()">✕</button>
+  </div>
+  <div class="sheet-body">
+
+    <!-- 백업/복원 -->
+    <div class="set-section-label">데이터 관리</div>
+    <button class="btn btn-ghost set-row-btn" onclick="closeSheet();setTimeout(()=>openSheet('shExport'),180)">
+      <span class="set-btn-ic">⬇</span>
+      <span class="set-btn-body">
+        <span class="set-btn-title">백업 파일로 저장</span>
+        <span class="set-btn-sub">Excel · PDF · JSON 형식으로 저장</span>
+      </span>
+    </button>
+    <button class="btn btn-ghost set-row-btn" onclick="closeSheet();setTimeout(()=>document.getElementById('btnImport').click(),180)">
+      <span class="set-btn-ic">⬆</span>
+      <span class="set-btn-body">
+        <span class="set-btn-title">JSON 백업에서 복원</span>
+        <span class="set-btn-sub">이전에 저장한 파일을 불러옵니다</span>
+      </span>
+    </button>
+
+    <!-- 보안 -->
+    <div class="set-section-label" style="margin-top:18px">보안</div>
+    <button class="btn btn-primary" id="setPinBtn" onclick="closeSheet();setTimeout(()=>{ const hasPin=!!localStorage.getItem(pinKey()); hasPin?confirmClearPin():setupPin(); },180)">
+      🔐 비밀번호 잠금 설정
+    </button>
+    <p class="set-pin-desc">PIN 잠금 시 앱 실행마다 4자리 번호를 입력합니다.<br>SHA-256으로 안전하게 보호됩니다.</p>
+
+    <!-- 기타 -->
+    <div class="set-section-label" style="margin-top:18px">기타</div>
+    <button class="btn btn-ghost set-row-btn" onclick="closeSheet();setTimeout(()=>{ if(D.people.length&&!confirm('샘플을 불러오면 현재 데이터를 덮어씁니다. 계속할까요?'))return; loadSample(); },180)">
+      <span class="set-btn-ic">✨</span>
+      <span class="set-btn-body">
+        <span class="set-btn-title">샘플 데이터 불러오기</span>
+        <span class="set-btn-sub">앱 기능을 체험할 수 있는 예시 데이터</span>
+      </span>
+    </button>
+
+    <!-- 데이터 초기화 — 위험 영역 분리 -->
+    <div class="set-danger-zone">
+      <div class="set-danger-label">⚠ 위험 구역</div>
+      <button class="btn set-danger-btn" onclick="confirmResetAll()">
+        🗑 전체 데이터 초기화
+      </button>
+      <p class="set-danger-desc">모든 인맥·일정 데이터가 영구 삭제됩니다.<br>되돌릴 수 없습니다.</p>
+    </div>
+
   </div>
 </div>
 

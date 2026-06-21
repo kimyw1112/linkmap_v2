@@ -735,9 +735,17 @@ document.getElementById('btnStep1Skip').addEventListener('click',()=>{
   if(!guardSensitive([{id:'fName',label:'이름/별칭'}])) return;
   const refVal = document.getElementById('fRef').value;
   const obj={name,rel:ST.relPick,region:'',ref:refVal?+refVal:null,lastContact:'',memo:''};
-  if(ST.editId){Object.assign(D.people.find(x=>x.id===ST.editId),obj);toast(name+' 수정 완료','✏');}
-  else{obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);toast(name+' 추가 완료 — 나중에 상세정보를 채워보세요','✅');}
-  save(); refresh(); closeSheet();
+  if(ST.editId){
+    const eid = ST.editId;
+    Object.assign(D.people.find(x=>x.id===eid),obj);
+    toast(name+' 수정 완료','✏');
+    save(); refresh(); closeSheet();
+    setTimeout(()=>openDetail(eid), 200);
+  } else {
+    obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);
+    toast(name+' 추가 완료 — 나중에 상세정보를 채워보세요','✅');
+    save(); refresh(); closeSheet();
+  }
 });
 document.getElementById('btnStep2Back').addEventListener('click',()=>showFormStep(1));
 
@@ -854,9 +862,17 @@ document.getElementById('btnSave').addEventListener('click',()=>{
     lastContact:document.getElementById('fDate').value,
     memo:document.getElementById('fMemo').value.trim(),
   };
-  if(ST.editId){Object.assign(D.people.find(x=>x.id===ST.editId),obj);toast(name+' 수정 완료','✏');}
-  else{obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);toast(name+' 추가','✅');}
-  save(); refresh(); closeSheet();
+  if(ST.editId){
+    const eid = ST.editId;
+    Object.assign(D.people.find(x=>x.id===eid),obj);
+    toast(name+' 수정 완료','✏');
+    save(); refresh(); closeSheet();
+    setTimeout(()=>openDetail(eid), 200);
+  } else {
+    obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);
+    toast(name+' 추가','✅');
+    save(); refresh(); closeSheet();
+  }
 });
 
 /* ═══ 상세 보기 ══════════════════════════════════════════════════ */
@@ -1808,18 +1824,38 @@ function guideGoTo(n){
     const el = document.getElementById('guideStep'+i);
     if(el) el.classList.toggle('hide', i!==n);
   });
+  /* 선택 모달도 숨김 */
+  document.getElementById('guideExitModal').classList.add('hide');
 
   /* 가이드 단계별 탭 이동 */
   if(n===1){
-    /* 오늘 할 일 탭으로 */
     document.querySelector('.nitem[data-v="today"]').click();
   } else if(n===3){
-    /* 연결망 탭으로 */
     document.querySelector('.nitem[data-v="map"]').click();
   } else if(n===2 || n===4){
-    /* 오늘 할 일 탭으로 복귀 */
     document.querySelector('.nitem[data-v="today"]').click();
   }
+}
+
+/* 건너뛰기 / backdrop 탭 → 선택 모달 표시 */
+function guideExit(){
+  [1,2,3,4].forEach(i => {
+    const el = document.getElementById('guideStep'+i);
+    if(el) el.classList.add('hide');
+  });
+  document.getElementById('guideExitModal').classList.remove('hide');
+}
+
+/* 샘플 유지하고 오버레이만 닫기 */
+function guideKeepSample(){
+  document.getElementById('guideOverlay').style.display = 'none';
+  toast('샘플 데이터가 유지됩니다. 설정 → 전체 초기화로 언제든 삭제할 수 있어요.', '💡');
+}
+
+/* 취소 — 가이드로 복귀 (마지막으로 보던 단계로) */
+function guideExitCancel(){
+  /* 어느 단계였는지 기억하지 않으므로 1장으로 복귀 */
+  guideGoTo(1);
 }
 
 function finishGuide(){
@@ -2030,7 +2066,7 @@ function classifyPerson(p){
   return null;
 }
 
-/* 오늘 할 일 전체 렌더링 — 관계온도 단일 기준 */
+/* 오늘 할 일 — 오늘의 1인 추천 + 오늘 일정 */
 function renderTodayFull(){
   const hdrEl = document.getElementById('todayDateHdr');
   if(hdrEl){
@@ -2038,7 +2074,7 @@ function renderTodayFull(){
     const DOW = ['일','월','화','수','목','금','토'];
     hdrEl.innerHTML = `
       <div class="today-date-main">${now.getMonth()+1}월 ${now.getDate()}일 (${DOW[now.getDay()]})</div>
-      <div class="today-date-sub">${D.people.length ? '관계 온도가 낮은 분부터 연락해보세요' : '먼저 인맥을 추가해보세요'}</div>`;
+      <div class="today-date-sub">${D.people.length ? '오늘 연락할 분을 확인하세요' : '먼저 인맥을 추가해보세요'}</div>`;
   }
 
   const heroBox = document.getElementById('todayHero');
@@ -2055,14 +2091,11 @@ function renderTodayFull(){
     return;
   }
 
-  /* 오늘 이미 연락한 사람 제외 후 관계온도 낮은 순 정렬 */
-  const scored = D.people
+  /* 오늘 연락 완료 제외 후 관계온도 낮은 순 1명 선택 */
+  const pick = D.people
     .map(p => ({ p, t: calcRelationshipTemp(p) }))
-    .filter(({ p }) => {
-      if(ago(p.lastContact) === 0) return false;  // 오늘 연락 완료 제외
-      return true;
-    })
-    .sort((a, b) => a.t.total - b.t.total);  // 낮은 온도 먼저
+    .filter(({ p }) => ago(p.lastContact) !== 0)
+    .sort((a, b) => a.t.total - b.t.total)[0] || null;
 
   /* 오늘 일정 */
   const today = new Date().toISOString().slice(0,10);
@@ -2072,45 +2105,44 @@ function renderTodayFull(){
 
   let html = '';
 
-  /* ── 관계온도 목록 ── */
-  if(scored.length){
-    html += `<div class="tl-section">
-      <div class="tl-section-hdr temp-hdr">
-        <span class="tl-section-ic">🌡</span>
-        <span class="tl-section-ttl">관계 온도 순 연락 목록</span>
-      </div>`;
+  /* ── 오늘의 1인 추천 카드 ── */
+  if(pick){
+    const { p, t } = pick;
+    const col = REL[p.rel].col;
+    const d   = ago(p.lastContact);
+    const dayTxt = d === null ? '연락 기록 없음' : `${d}일 전 연락`;
+    const hint = t.total < 40
+      ? '안부 연락을 드려보세요'
+      : t.total >= 70
+        ? '소개 요청하기 좋은 타이밍이에요'
+        : '꾸준히 관계를 유지해보세요';
 
-    scored.slice(0, 8).forEach(({ p, t }) => {
-      const col = REL[p.rel].col;
-      const d   = ago(p.lastContact);
-      const dayTxt = d === null ? '연락 기록 없음' : d === 0 ? '오늘' : `${d}일 전`;
-
-      /* 온도에 따른 행동 힌트 한 줄 */
-      const hint = t.total < 40
-        ? '먼저 안부 연락을 드려보세요'
-        : t.total >= 70
-          ? '소개 요청하기 좋은 타이밍이에요'
-          : '꾸준히 관계를 유지해보세요';
-
-      html += `<div class="tl-row tl-temp-row" onclick="openDetail(${p.id})">
-        <div class="tl-av" style="background:linear-gradient(135deg,${lighten(col)},${col})">${esc((p.name||'?').charAt(0))}</div>
-        <div class="tl-info">
-          <div class="tl-name">${esc(p.name)}<span class="pbadge" style="background:${col}22;color:${col};margin-left:6px">${REL[p.rel].sh}</span></div>
-          <div class="tl-reason">${hint} · ${dayTxt}</div>
+    html += `<div class="today-pick-card" onclick="openDetail(${p.id})">
+      <div class="today-pick-label">📌 오늘 연락할 분</div>
+      <div class="today-pick-body">
+        <div class="today-pick-av" style="background:linear-gradient(135deg,${lighten(col)},${col})">${esc((p.name||'?').charAt(0))}</div>
+        <div class="today-pick-info">
+          <div class="today-pick-name">${esc(p.name)}<span class="pbadge" style="background:${col}22;color:${col};margin-left:8px">${REL[p.rel].sh}</span></div>
+          <div class="today-pick-day">${dayTxt}</div>
+          <div class="today-pick-hint">${hint}</div>
         </div>
-        <div class="tl-temp-badge" style="color:${t.color}">
-          <div class="tl-temp-emoji">${t.emoji.split('')[0]}</div>
-          <div class="tl-temp-num">${t.total}°</div>
+        <div class="today-pick-temp" style="color:${t.color}">
+          <div class="today-pick-emoji">${t.emoji.split('')[0]}</div>
+          <div class="today-pick-num">${t.total}°</div>
         </div>
-      </div>`;
-    });
-
-    if(scored.length > 8){
-      html += `<div class="td-more" onclick="document.querySelector('.nitem[data-v=list]').click()">
-        전체 ${scored.length}명 보기 →
-      </div>`;
-    }
-    html += `</div>`;
+      </div>
+      <div class="today-pick-bar-wrap">
+        <div class="today-pick-bar-fill" style="width:${t.total}%;background:${t.color}"></div>
+      </div>
+      <button class="today-pick-btn" onclick="event.stopPropagation();markContact(${p.id});renderTodayFull()">
+        📞 오늘 연락했어요
+      </button>
+    </div>`;
+  } else {
+    html += `<div class="tl-empty" style="padding:32px 24px 16px">
+      <div class="tl-empty-ic">🎉</div>
+      <div class="tl-empty-msg">오늘 연락할 분이 없어요!</div>
+    </div>`;
   }
 
   /* ── 오늘 일정 ── */
@@ -2120,7 +2152,7 @@ function renderTodayFull(){
         <span class="tl-section-ic">📅</span>
         <span class="tl-section-ttl">오늘 일정</span>
       </div>`;
-    todayScheds.slice(0,3).forEach(s=>{
+    todayScheds.forEach(s=>{
       const person = s.personId ? D.people.find(p=>p.id===s.personId) : null;
       html += `<div class="tl-row" onclick="document.querySelector('.nitem[data-v=cal]').click()">
         <div class="tl-time">${s.time||'—'}</div>
@@ -2132,13 +2164,6 @@ function renderTodayFull(){
       </div>`;
     });
     html += `</div>`;
-  }
-
-  if(!scored.length && !todayScheds.length){
-    html = `<div class="tl-empty">
-      <div class="tl-empty-ic">🎉</div>
-      <div class="tl-empty-msg">오늘은 모두 잘 관리되고 있어요!</div>
-    </div>`;
   }
 
   dashBox.innerHTML = html;
@@ -2348,13 +2373,40 @@ document.getElementById('fileIn').addEventListener('change',e=>{
 });
 
 /* ═══ 설정 ══════════════════════════════════════════════════════ */
-document.getElementById('btnSetting').addEventListener('click',()=>{
-  const hasPin=!!localStorage.getItem(pinKey());
-  const c=prompt(`설정\n\n1. 샘플 데이터 불러오기\n2. 비밀번호 잠금 ${hasPin?'해제':'설정'}\n3. 전체 데이터 초기화`);
-  if(c==='1') loadSample();
-  else if(c==='2'){hasPin?clearPin():setupPin();}
-  else if(c==='3'){if(confirm('모든 데이터를 삭제합니다. 되돌릴 수 없습니다.')){D={people:[],nid:1};Object.keys(POS).forEach(k=>delete POS[k]);save();refresh();toast('초기화 완료','🗑');}}
-});
+document.getElementById('btnSetting').addEventListener('click', openSettingSheet);
+
+function openSettingSheet(){
+  /* 현재 상태 반영 */
+  const hasPin = !!localStorage.getItem(pinKey());
+  document.getElementById('setPinBtn').textContent =
+    hasPin ? '🔓 비밀번호 잠금 해제' : '🔐 비밀번호 잠금 설정';
+  document.getElementById('setPinBtn').className =
+    hasPin ? 'btn btn-ghost set-pin-off' : 'btn btn-primary';
+  openSheet('shSetting');
+}
+
+/* 전체 초기화 — 2단계 확인 */
+function confirmResetAll(){
+  closeSheet();
+  setTimeout(()=>{
+    if(!confirm('⚠ 전체 초기화\n\n모든 인맥·일정 데이터가 삭제됩니다.\n이 작업은 되돌릴 수 없습니다.\n\n정말 삭제할까요?')) return;
+    if(!confirm('마지막 확인입니다.\n\n"확인"을 누르면 모든 데이터가 즉시 삭제됩니다.')) return;
+    D={people:[],nid:1};
+    Object.keys(POS).forEach(k=>delete POS[k]);
+    SCHEDS=[]; saveScheds();
+    save(); refresh();
+    toast('전체 데이터가 초기화됐습니다','🗑');
+  }, 200);
+}
+
+/* PIN 해제 확인 */
+function confirmClearPin(){
+  if(!confirm('비밀번호 잠금을 해제할까요?\n\n해제 후에는 앱 실행 시 비밀번호를 묻지 않습니다.')){
+    return;
+  }
+  localStorage.removeItem(pinKey());
+  toast('비밀번호 잠금이 해제됐습니다','🔓');
+}
 function loadSample(){
   if(D.people.length&&!confirm('샘플을 불러오면 현재 데이터를 덮어씁니다.'))return;
   const t=Date.now(),dago=n=>new Date(t-n*86400000).toISOString().slice(0,10);
@@ -2374,9 +2426,22 @@ function loadSample(){
   Object.keys(POS).forEach(k=>delete POS[k]); save(); refresh(); toast('샘플 로드 완료','✨');
 }
 
-/* ═══ 비밀번호 잠금 ══════════════════════════════════════════════ */
+/* ═══ 비밀번호 잠금 ══════════════════════════════════════════════
+   보안: SHA-256 (Web Crypto API) 로 PIN 해시 저장
+   — 4자리 1만 가지를 전부 해시해도 역산 불가
+   — 기존 단순 hashCode() 취약점 수정
+═══════════════════════════════════════════════════════════════ */
 let pinIn='',pinMode='check',pinFirst='';
-const hashP=s=>{let h=0;for(let i=0;i<s.length;i++){h=(h<<5)-h+s.charCodeAt(i);h|=0;}return String(h);};
+
+/* SHA-256 해시 → HEX 문자열 반환 (async) */
+async function hashP(s){
+  const buf = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode('lm_pin_salt_v2:' + s)   // salt로 레인보우테이블 차단
+  );
+  return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 function buildPad(){
   const pad=document.getElementById('ppad'); pad.innerHTML='';
   ['1','2','3','4','5','6','7','8','9','⌫','0','✓'].forEach(k=>{
@@ -2391,24 +2456,57 @@ function buildPad(){
   });
 }
 function drawDots(){const d=document.getElementById('pdots');d.innerHTML='';for(let i=0;i<4;i++){const s=document.createElement('div');s.className='pdot'+(i<pinIn.length?' on':'');d.appendChild(s);}}
-function submitPin(){
+
+async function submitPin(){
   if(pinIn.length<4)return;
   const pk=pinKey();
   if(pinMode==='check'){
-    if(hashP(pinIn)===localStorage.getItem(pk)) document.getElementById('lockScreen').classList.add('hide');
-    else{pinIn='';drawDots();document.getElementById('lockD').textContent='비밀번호가 틀렸습니다. 다시 입력하세요.';}
+    const hashed = await hashP(pinIn);
+    if(hashed===localStorage.getItem(pk)){
+      document.getElementById('lockScreen').classList.add('hide');
+    } else {
+      pinIn='';drawDots();
+      document.getElementById('lockD').textContent='비밀번호가 틀렸습니다. 다시 입력하세요.';
+    }
   } else if(pinMode==='set'){
     pinFirst=pinIn;pinIn='';pinMode='confirm';drawDots();
     document.getElementById('lockT').textContent='비밀번호 확인';
     document.getElementById('lockD').textContent='같은 번호를 한 번 더 입력하세요';
   } else {
-    if(pinIn===pinFirst){localStorage.setItem(pk,hashP(pinIn));document.getElementById('lockScreen').classList.add('hide');toast('비밀번호 잠금 설정됐습니다','🔐');}
-    else{pinIn='';pinMode='set';pinFirst='';drawDots();document.getElementById('lockT').textContent='비밀번호 설정';document.getElementById('lockD').textContent='번호가 다릅니다. 다시 설정하세요.';}
+    if(pinIn===pinFirst){
+      const hashed = await hashP(pinIn);
+      localStorage.setItem(pk, hashed);
+      document.getElementById('lockScreen').classList.add('hide');
+      toast('비밀번호 잠금 설정됐습니다 (SHA-256 보호)','🔐');
+    } else {
+      pinIn='';pinMode='set';pinFirst='';drawDots();
+      document.getElementById('lockT').textContent='비밀번호 설정';
+      document.getElementById('lockD').textContent='번호가 다릅니다. 다시 설정하세요.';
+    }
   }
 }
-function setupPin(){pinMode='set';pinIn='';pinFirst='';document.getElementById('lockT').textContent='비밀번호 설정';document.getElementById('lockD').textContent='사용할 4자리 번호를 입력하세요';buildPad();drawDots();document.getElementById('lockScreen').classList.remove('hide');}
-function clearPin(){if(confirm('비밀번호 잠금을 해제할까요?')){localStorage.removeItem(pinKey());toast('잠금이 해제됐습니다','🔓');}}
-function checkLock(){if(!localStorage.getItem(pinKey()))return;pinMode='check';pinIn='';buildPad();drawDots();document.getElementById('lockT').textContent='잠금 해제';document.getElementById('lockD').textContent='4자리 비밀번호를 입력하세요';document.getElementById('lockScreen').classList.remove('hide');}
+function setupPin(){
+  /* 기존 PIN이 구버전(짧은 숫자) 형식이면 자동 초기화 후 재설정 유도 */
+  const stored = localStorage.getItem(pinKey());
+  if(stored && stored.length < 10){
+    localStorage.removeItem(pinKey());
+    toast('보안 강화로 비밀번호를 재설정합니다','🔐');
+  }
+  pinMode='set';pinIn='';pinFirst='';
+  document.getElementById('lockT').textContent='비밀번호 설정';
+  document.getElementById('lockD').textContent='사용할 4자리 번호를 입력하세요';
+  buildPad();drawDots();document.getElementById('lockScreen').classList.remove('hide');
+}
+function clearPin(){
+  openSettingSheet(); // 설정 시트에서 처리
+}
+function checkLock(){
+  if(!localStorage.getItem(pinKey()))return;
+  pinMode='check';pinIn='';buildPad();drawDots();
+  document.getElementById('lockT').textContent='잠금 해제';
+  document.getElementById('lockD').textContent='4자리 비밀번호를 입력하세요';
+  document.getElementById('lockScreen').classList.remove('hide');
+}
 
 /* ═══ 웹 푸시 알림 ══════════════════════════════════════════════
    Service Worker + Notification API 사용
