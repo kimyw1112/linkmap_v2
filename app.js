@@ -381,7 +381,7 @@ const cvs=document.getElementById('cvs');
 const ctx=cvs.getContext('2d');
 let W=0,H=0,DPR=1;
 const POS={};
-let ST={ filt:'all', selId:null, editId:null, relPick:'customer', zoom:1, ox:0, oy:0, drag:null, dragNode:null };
+let ST={ filt:'all', selId:null, editId:null, relPick:'customer', zoom:1, ox:0, oy:0, drag:null, dragNode:null, lastLayoutCount:-1 };
 
 function resize(){
   const wrap=document.getElementById('mapWrap');
@@ -391,35 +391,82 @@ function resize(){
   cvs.style.width=W+'px'; cvs.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-function initPos(){
-  const cx=W/2,cy=H/2,n=D.people.length;
-  D.people.forEach((p,i)=>{
-    if(!POS[p.id]){ const a=(i/Math.max(1,n))*Math.PI*2,r=55+(i%6)*28; POS[p.id]={x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r,vx:0,vy:0}; }
+/* ═══ 연결망 레이아웃 — 정적 배치 (허브 중심) ═══════════════════
+   기존에는 매 프레임 흔들리는 포스 시뮬레이션이었으나,
+   "화면이 계속 움직여서 보기 불편하다"는 피드백에 따라
+   한 번 계산해서 고정하는 방식으로 변경.
+   - 가장 영향력 큰(소개를 많이 받은) 인물을 정중앙에 고정
+   - 그 사람이 직접 소개한 인맥을 1차 동심원에 배치
+   - 2차 소개는 2차 동심원, 그 이상은 바깥쪽 원에 순서대로 배치
+   - 소개 관계가 없는 인맥(직접 인맥)은 가장 바깥쪽에 별도 배치
+════════════════════════════════════════════════════════════════ */
+function layoutNetwork(){
+  const cx=W/2, cy=H/2;
+  const ppl=D.people;
+  if(!ppl.length) return;
+
+  /* 1) 중심 허브 선정 — 가장 많이 소개해 준 인물(영향력 1위) */
+  let center=null, maxRc=-1;
+  ppl.forEach(p=>{ const r=rc(p.id); if(r>maxRc){ maxRc=r; center=p; } });
+
+  /* 2) BFS로 중심 허브로부터의 "소개 단계(depth)" 계산 */
+  const depth={};
+  const children={}; // personId -> [소개한 사람들]
+  ppl.forEach(p=>{ if(p.ref!=null){ (children[p.ref]=children[p.ref]||[]).push(p.id); } });
+
+  if(center){
+    depth[center.id]=0;
+    const queue=[center.id];
+    while(queue.length){
+      const cur=queue.shift();
+      (children[cur]||[]).forEach(childId=>{
+        if(depth[childId]===undefined){ depth[childId]=depth[cur]+1; queue.push(childId); }
+      });
+    }
+  }
+
+  /* 3) depth가 없는(연결 안 된) 사람들은 가장 바깥 링으로 */
+  const maxDepth = Math.max(0, ...Object.values(depth));
+  const outerRing = maxDepth+1;
+  ppl.forEach(p=>{ if(depth[p.id]===undefined) depth[p.id]=outerRing; });
+
+  /* 4) 같은 depth끼리 그룹핑 후 동심원에 균등 배치 */
+  const byDepth={};
+  ppl.forEach(p=>{ (byDepth[depth[p.id]]=byDepth[depth[p.id]]||[]).push(p); });
+
+  const ringGap = 115; // 동심원 간 간격(px, 월드 좌표 기준)
+  Object.keys(byDepth).forEach(dStr=>{
+    const d=+dStr;
+    const group=byDepth[d];
+    if(d===0){
+      // 중심 허브는 정중앙 고정
+      group.forEach(p=>{ POS[p.id]={x:cx,y:cy,vx:0,vy:0}; });
+      return;
+    }
+    const radius = ringGap*d;
+    const n=group.length;
+    group.forEach((p,i)=>{
+      // 약간의 각도 오프셋(depth마다 회전)으로 방사형 라인이 겹치지 않게
+      const angleOffset = d*0.4;
+      const a = (i/n)*Math.PI*2 + angleOffset;
+      POS[p.id]={ x:cx+Math.cos(a)*radius, y:cy+Math.sin(a)*radius, vx:0, vy:0 };
+    });
   });
 }
-function sim(){
-  const ppl=D.people,cx=W/2,cy=H/2;
-  let totalV=0;
-  for(const p of ppl){
-    const pp=POS[p.id]; if(!pp||ST.dragNode===p.id) continue;
-    // 중심 인력 — 살짝 강하게
-    pp.vx+=(cx-pp.x)*.006; pp.vy+=(cy-pp.y)*.006;
-    // 노드 간 반발
-    for(const q of ppl){
-      if(q.id===p.id) continue;
-      const qp=POS[q.id]; if(!qp) continue;
-      const dx=pp.x-qp.x,dy=pp.y-qp.y,d2=Math.max(1,dx*dx+dy*dy),d=Math.sqrt(d2),f=2800/d2;
-      pp.vx+=(dx/d)*f; pp.vy+=(dy/d)*f;
-    }
-    // 소개 연결 인력
-    if(p.ref){const rp=POS[p.ref];if(rp){pp.vx+=(rp.x-pp.x)*.018;pp.vy+=(rp.y-pp.y)*.018;}}
-    // 감쇠 — 더 강하게 (.84 → .72) 빠르게 멈춤
-    pp.vx*=.72; pp.vy*=.72;
-    pp.x+=pp.vx; pp.y+=pp.vy;
-    totalV+=Math.abs(pp.vx)+Math.abs(pp.vy);
+
+function initPos(){
+  /* 사람 수가 바뀌었을 때만 레이아웃을 다시 계산.
+     드래그로 옮긴 위치는 D.people이 바뀌기 전까지 유지된다. */
+  const n=D.people.length;
+  if(ST.lastLayoutCount!==n || D.people.some(p=>!POS[p.id])){
+    layoutNetwork();
+    ST.lastLayoutCount=n;
   }
-  // 전체 운동량이 충분히 작으면 시뮬레이션 정지
-  ST.simActive = totalV > 0.08;
+}
+function sim(){
+  /* 정적 배치로 전환되어 더 이상 매 프레임 위치를 계산하지 않는다.
+     드래그 중인 노드만 사용자 입력을 그대로 반영한다. */
+  ST.simActive=false;
 }
 
 const w2s=(x,y)=>({sx:x*ST.zoom+ST.ox,sy:y*ST.zoom+ST.oy});
@@ -515,7 +562,7 @@ function onMv(e){
   if(pinching||!ST.drag)return;
   const{x,y}=gxy(e);
   if(Math.hypot(x-sp.x,y-sp.y)>10){moved=true;tapId=null;}
-  if(ST.dragNode){const w=s2w(x,y);POS[ST.dragNode].x=w.x;POS[ST.dragNode].y=w.y;POS[ST.dragNode].vx=POS[ST.dragNode].vy=0; ST.simActive=true;}
+  if(ST.dragNode){const w=s2w(x,y);POS[ST.dragNode].x=w.x;POS[ST.dragNode].y=w.y;POS[ST.dragNode].vx=POS[ST.dragNode].vy=0;}
   else if(ST.drag.ps){ST.ox=ST.drag.ps.ox+(x-ST.drag.x);ST.oy=ST.drag.ps.oy+(y-ST.drag.y);}
 }
 function onUp(){
@@ -640,7 +687,7 @@ document.getElementById('btnSaveQuick').addEventListener('click',()=>{
   };
   if(ST.editId){Object.assign(D.people.find(x=>x.id===ST.editId),obj);toast(name+' 수정 완료','✏');}
   else{obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);toast(name+' 추가! 나중에 상세 정보를 입력하세요','✅');}
-  save(); ST.simActive=true; refresh(); closeSheet();
+  save(); refresh(); closeSheet();
 });
 
 /* 이전으로 — 2단계 → 1단계 */
@@ -769,7 +816,7 @@ document.getElementById('btnSave').addEventListener('click',()=>{
   };
   if(ST.editId){Object.assign(D.people.find(x=>x.id===ST.editId),obj);toast(name+' 수정 완료','✏');}
   else{obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);toast(name+' 추가 완료','✅');}
-  save(); ST.simActive=true; refresh(); closeSheet();
+  save(); refresh(); closeSheet();
 });
 
 /* ═══ 상세 보기 ══════════════════════════════════════════════════ */
@@ -1380,13 +1427,6 @@ function startWithSample(){
 /* ═══ 통계 갱신 ═════════════════════════════════════════════════ */
 function refresh(){
   initPos();
-  document.getElementById('stTotal').textContent=D.people.length;
-  document.getElementById('stEdge').textContent=D.people.filter(p=>p.ref).length;
-  const rate=calcSuccessRate();
-  const rateEl=document.getElementById('stRate');
-  if(rate===null){ rateEl.textContent='—'; rateEl.style.fontSize='18px'; }
-  else { rateEl.textContent=rate+'%'; rateEl.style.fontSize=rate===100?'12px':'13px'; }
-  document.getElementById('stAlert').textContent=buildAlerts().filter(i=>i.lvl>0).length;
   document.getElementById('cvHint').style.display=D.people.length?'none':'flex';
   renderTodayDash();
   renderList(); renderAlerts();

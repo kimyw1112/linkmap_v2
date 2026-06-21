@@ -25,7 +25,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <title>LinkMap</title>
-<link rel="stylesheet" href="style.css?v=202606210000">
+<link rel="stylesheet" href="style.css?v=202606210551">
 <style>
 /* ─── 앱 셸 ────────────────────────────────────────────────── */
 html,body { height:100%; overflow:hidden; background:var(--bg); }
@@ -54,12 +54,7 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
 .logout-btn { font-size:11px; color:var(--brand); padding:2px 7px; border-radius:6px; background:#fff; border:1px solid rgba(232,90,0,.3); }
 .logout-btn:active { background:var(--brand); color:#fff; }
 
-/* ─── 통계 바 ───────────────────────────────────────────────── */
-.stats { display:flex; margin:8px 10px 6px; gap:6px; flex-shrink:0; }
-.stat-card { flex:1; background:#fff; border:1px solid var(--border); border-radius:12px; padding:8px 4px; text-align:center; position:relative; overflow:hidden; }
-.stat-card::before { content:''; position:absolute; inset:0; opacity:.05; background:var(--acc,transparent); }
-.stat-val { font-family:var(--num); font-size:16px; font-weight:700; line-height:1; color:var(--acc,var(--txt)); letter-spacing:-.4px; }
-.stat-lbl { font-size:8.5px; color:var(--txt3); font-weight:700; letter-spacing:.2px; margin-top:3px; }
+/* (통계 바는 오늘 할 일 홈으로 통합되어 제거됨) */
 
 /* ─── 맵 ────────────────────────────────────────────────────── */
 .map-wrap {
@@ -97,15 +92,14 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
 .cv-hint h3 { font-family:var(--display); font-size:17px; font-weight:700; color:var(--txt2); margin-bottom:8px; letter-spacing:-.2px; }
 .cv-hint p  { font-size:12px; color:var(--txt3); line-height:1.8; }
 
-/* ─── 하단 탭 ───────────────────────────────────────────────── */
-.nav { display:flex; background:#fff; border-top:1px solid var(--border); flex-shrink:0; z-index:30; padding-bottom:env(safe-area-inset-bottom); }
+/* ─── 하단 탭은 style.css에서 고정 위치로 정의됨 ─── */
 .nitem { flex:1; padding:10px 0 12px; text-align:center; color:var(--txt3); border-top:2px solid transparent; margin-top:-1px; min-height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; transition:color .15s; }
 .nitem .nic { font-size:22px; display:block; line-height:1.2; }
 .nitem .nlb { font-size:10px; font-weight:700; letter-spacing:.3px; margin-top:2px; }
 .nitem.on { color:var(--brand); border-top-color:var(--brand); }
 
 /* ─── 서브 뷰 ───────────────────────────────────────────────── */
-.view { position:absolute; inset:0; background:var(--bg); z-index:25; display:flex; flex-direction:column; transform:translateX(105%); transition:transform .3s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+.view { position:absolute; top:0; left:0; right:0; bottom:64px; background:var(--bg); z-index:25; display:flex; flex-direction:column; transform:translateX(105%); transition:transform .3s cubic-bezier(.4,0,.2,1); overflow:hidden; }
 .view.show { transform:translateX(0); }
 .vhdr { display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:2px solid var(--brand); background:#fff; flex-shrink:0; min-height:52px; }
 .vhdr h2 { font-family:var(--display); font-size:17px; font-weight:700; flex:1; letter-spacing:-.2px; }
@@ -201,17 +195,6 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
     </div>
   </div>
   <input type="file" id="fileIn" accept=".json" style="display:none">
-
-  <!-- 통계 바 -->
-  <div class="stats">
-    <div class="stat-card" style="--acc:var(--brand)">   <div class="stat-val" id="stTotal">0</div><div class="stat-lbl">전체 인맥</div></div>
-    <div class="stat-card" style="--acc:var(--blue)">    <div class="stat-val" id="stEdge">0</div> <div class="stat-lbl">소개 연결</div></div>
-    <div class="stat-card" style="--acc:var(--green)" id="stRateCard" title="고객 중 1명 이상 소개한 비율">
-      <div class="stat-val" id="stRate" style="font-size:13px">—</div>
-      <div class="stat-lbl">소개 성공률</div>
-    </div>
-    <div class="stat-card" style="--acc:var(--red)">     <div class="stat-val" id="stAlert">0</div><div class="stat-lbl">연락 알림</div></div>
-  </div>
 
   <!-- 캔버스 -->
   <!-- 오늘 할 일 뷰 (메인 첫 화면) -->
@@ -465,6 +448,6 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
 <!-- 토스트 -->
 <div id="toast"></div>
 
-<script src="app.js?v=202606210000"></script>
+<script src="app.js?v=202606210551"></script>
 </body>
 </html>
