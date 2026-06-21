@@ -97,9 +97,9 @@ input,select,textarea { font-family:var(--font); font-size:16px; color:var(--txt
 
 /* ═══ 오버레이 & 바텀 시트 ══════════════════════════════════════ */
 #overlay {
-  position:fixed; inset:0; background:rgba(60,30,10,.5);
+  position:fixed; inset:0; background:rgba(60,30,10,.45);
   z-index:50; opacity:0; pointer-events:none;
-  transition:opacity .25s; backdrop-filter:blur(4px);
+  transition:opacity .25s;
 }
 #overlay.on { opacity:1; pointer-events:auto; }
 
@@ -483,3 +483,256 @@ input,select,textarea { font-family:var(--font); font-size:16px; color:var(--txt
 .cr-hist-row:last-child { border-bottom:none; }
 .cr-hist-date { color:var(--txt3); flex-shrink:0; }
 .cr-hist-result { font-weight:700; }
+
+/* ═══ 오늘 할 일 — 독립 홈 화면 ════════════════════════════════ */
+#vToday {
+  position:absolute; inset:0;
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  padding:10px 12px 100px;
+  background:var(--bg);
+}
+.td-date {
+  font-size:15px; font-weight:700; color:var(--txt2);
+  padding:6px 2px 12px;
+}
+.td-section-title {
+  font-size:13px; font-weight:700; color:var(--txt3);
+  padding:14px 2px 6px;
+  border-bottom:1px solid var(--border2);
+  margin-bottom:6px;
+}
+.td-urgent-title { color:var(--red); }
+
+/* 카드 공통 */
+.td-card {
+  display:flex; align-items:center; gap:12px;
+  background:var(--surface); border-radius:14px;
+  border:1.5px solid var(--border2);
+  padding:12px 14px; margin-bottom:8px;
+  cursor:pointer;
+  transition:background .12s;
+  -webkit-tap-highlight-color:transparent;
+}
+.td-card:active { background:var(--brand-pale); }
+.td-card-urgent { border-color:#FECACA; background:#FFF5F5; }
+.td-card-normal { border-color:#FED7AA; }
+.td-card-sched  { border-color:#BBF7D0; }
+.td-card-pipe   { border-color:#DDD6FE; }
+
+.td-card-left { display:flex; align-items:center; gap:10px; flex:1; min-width:0; }
+.td-av {
+  width:40px; height:40px; border-radius:12px; flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
+  font-size:17px; font-weight:700; color:#fff;
+}
+.td-card-name { font-size:15px; font-weight:700; color:var(--txt); }
+.td-card-sub  { font-size:13px; color:var(--txt3); margin-top:2px; }
+.td-card-right { display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex-shrink:0; }
+
+/* 경과일 배지 */
+.td-days-badge {
+  font-size:12px; font-weight:700; padding:3px 9px;
+  border-radius:20px; white-space:nowrap;
+}
+.td-days-badge.urgent { background:#FEE2E2; color:var(--red); }
+.td-days-badge.normal { background:#FEF3C7; color:var(--amber); }
+
+/* 접촉함 버튼 */
+.td-contact-btn {
+  font-size:12px; font-weight:700; padding:5px 11px;
+  border-radius:10px; border:none; cursor:pointer;
+  background:var(--brand); color:#fff;
+  min-height:32px; white-space:nowrap;
+  transition:opacity .12s;
+}
+.td-contact-btn:active { opacity:.75; }
+.td-contact-btn.sec { background:var(--border2); color:var(--txt2); }
+
+/* 일정 카드 */
+.td-sched-time { font-size:14px; font-weight:700; color:var(--brand); flex-shrink:0; min-width:36px; }
+.td-sched-info { flex:1; min-width:0; }
+
+/* 파이프라인 진행률 */
+.td-pipe-pct { font-size:16px; font-weight:700; color:#7C3AED; }
+
+/* 더 보기 */
+.td-more {
+  text-align:center; font-size:13px; font-weight:700; color:var(--brand);
+  padding:8px 0 4px; cursor:pointer;
+}
+
+/* 모두 완료 */
+.td-all-ok {
+  text-align:center; padding:40px 20px;
+}
+.td-ok-ic  { font-size:52px; margin-bottom:12px; }
+.td-ok-txt { font-size:16px; color:var(--txt3); line-height:1.8; }
+
+/* 첫 방문 빈 화면 */
+.td-empty-home {
+  text-align:center; padding:40px 20px;
+}
+.td-empty-ic  { font-size:52px; margin-bottom:12px; }
+.td-empty-txt { font-size:16px; color:var(--txt3); line-height:1.8; margin-bottom:24px; }
+.td-start-btn { max-width:240px; margin:0 auto; }
+
+/* 빠른 이동 버튼 */
+.td-quick {
+  display:flex; gap:8px; margin-top:20px; padding-top:16px;
+  border-top:1px solid var(--border2);
+}
+.td-q-btn {
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:5px;
+  padding:12px 6px; border-radius:13px;
+  background:var(--surface); border:1.5px solid var(--border2);
+  font-size:20px; color:var(--txt2); cursor:pointer;
+  transition:background .12s;
+  min-height:64px;
+}
+.td-q-btn:active { background:var(--brand-pale); border-color:var(--brand); }
+.td-q-btn span { font-size:11px; font-weight:700; }
+
+/* ═══ 연결망 뷰 컨테이너 ════════════════════════════════════════ */
+#vMap {
+  position:absolute; inset:0;
+}
+
+/* ═══ 인맥 추가 2단계 폼 ════════════════════════════════════════ */
+.step-badge {
+  display:inline-block;
+  background:var(--brand); color:#fff;
+  font-size:12px; font-weight:700;
+  padding:4px 12px; border-radius:20px;
+  margin-bottom:16px;
+}
+.step-badge-2 { background:#7C3AED; }
+
+.step-summary {
+  display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  background:var(--bg); border-radius:12px;
+  padding:10px 14px; margin-bottom:16px;
+  border:1.5px solid var(--border2);
+}
+.step-sum-rel {
+  font-size:12px; font-weight:700; color:#fff;
+  padding:3px 10px; border-radius:20px;
+}
+.step-sum-name { font-size:15px; font-weight:700; color:var(--txt); }
+.step-sum-region { font-size:13px; color:var(--txt3); }
+
+/* ═══ 파이프라인 단계별 스크립트 박스 ══════════════════════════ */
+.pl-script-box {
+  margin: 10px 0 0;
+  border-top: 1.5px dashed var(--border2);
+  padding: 14px 16px 12px;
+}
+.pl-script-head {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px; gap: 8px;
+}
+.pl-script-title {
+  font-size: 13px; font-weight: 700;
+  color: var(--txt2); flex: 1;
+  line-height: 1.4;
+}
+.pl-script-copy {
+  flex-shrink: 0;
+  padding: 5px 12px; border-radius: 10px;
+  background: var(--brand-pale); border: 1px solid var(--brand);
+  color: var(--brand); font-size: 12px; font-weight: 700;
+  cursor: pointer; min-height: 34px;
+  transition: background .12s;
+}
+.pl-script-copy:active { background: var(--brand); color: #fff; }
+.pl-script-text {
+  font-size: 14px; line-height: 1.85;
+  color: var(--txt); background: var(--bg);
+  border-radius: 12px; padding: 12px 14px;
+  border: 1px solid var(--border2);
+  white-space: pre-wrap; word-break: keep-all;
+}
+.pl-script-hint {
+  font-size: 12px; color: var(--txt3);
+  margin-top: 8px; text-align: center;
+}
+
+/* ═══ 영향력 기반 우선순위 배지 ═══════════════════════════════ */
+.at-badges {
+  display: flex; gap: 6px; margin: 6px 0 2px;
+}
+.hub-badge {
+  font-size: 11px; font-weight: 700;
+  background: linear-gradient(135deg, #FFF3D6, #FFE3A8);
+  color: #92600A;
+  padding: 3px 9px; border-radius: 20px;
+  border: 1px solid #F0C868;
+}
+.ref-badge {
+  font-size: 11px; font-weight: 600;
+  background: var(--bg); color: var(--txt3);
+  padding: 3px 9px; border-radius: 20px;
+  border: 1px solid var(--border2);
+}
+
+.sort-hint {
+  font-size: 12px; color: var(--txt3);
+  padding: 2px 4px 10px;
+}
+
+/* ═══ 관계 온도 지수 ═══════════════════════════════════════════ */
+.temp-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 14px; border-radius: 20px;
+  border: 1.5px solid;
+  margin: 8px 0 2px;
+}
+.temp-ic { font-size: 14px; }
+.temp-label { font-size: 13px; font-weight: 700; }
+.temp-score { font-size: 12px; font-weight: 700; opacity: .75; }
+
+.pn-temp {
+  font-size: 12px; margin-left: 4px; vertical-align: middle;
+}
+
+/* ═══ 소개 감사 피드백 섹션 ════════════════════════════════════ */
+.fb-section {
+  margin: 0 0 4px;
+  background: var(--surface);
+  border-radius: 16px;
+  border: 1.5px solid #E9D5FF;
+  overflow: hidden;
+}
+.fb-title-main {
+  font-size: 14px; font-weight: 700; color: #7E22CE;
+  padding: 13px 16px 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.fb-count {
+  font-size: 11px; font-weight: 700;
+  background: #F3E8FF; color: #7E22CE;
+  padding: 2px 9px; border-radius: 20px;
+}
+.fb-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 16px;
+  border-top: 1px solid #F3E8FF;
+}
+.fb-row.pending { background: #FAF5FF; }
+.fb-ic { font-size: 20px; flex-shrink: 0; }
+.fb-body { flex: 1; min-width: 0; }
+.fb-title { font-size: 14px; font-weight: 600; color: var(--txt); }
+.fb-sub { font-size: 12px; color: var(--txt3); margin-top: 2px; }
+.fb-date { font-size: 12px; color: var(--txt3); margin-top: 2px; }
+.fb-btn {
+  flex-shrink: 0;
+  padding: 7px 14px; border-radius: 10px;
+  background: #9333EA; color: #fff;
+  font-size: 13px; font-weight: 700; border: none;
+  cursor: pointer; min-height: 36px;
+}
+.fb-btn:active { opacity: .8; }
+
+/* 오늘 할 일 — 피드백/쿨링 카드 */
+.td-card-feedback { border-color: #E9D5FF; background: #FAF5FF; }
+.td-card-cooling { border-color: #BFDBFE; background: #EFF6FF; }

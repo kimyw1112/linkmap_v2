@@ -114,11 +114,41 @@ const SCRIPTS = {
    person.pipeline = { stage:-1~4, dates:[null|'YYYY-MM-DD'×5], history:[] }
 ════════════════════════════════════════════════════════════════ */
 const PIPELINE_STAGES = [
-  { label:'고객등록', icon:'👤', col:'#15803D', bg:'#ECFDF5' },
-  { label:'보장분석', icon:'🔍', col:'#D97706', bg:'#FFFBEB' },
-  { label:'가입설계', icon:'📋', col:'#1A6FD4', bg:'#EFF6FF' },
-  { label:'보험가입', icon:'✅', col:'#9333EA', bg:'#F5F3FF' },
-  { label:'지인소개', icon:'🔗', col:'#E85A00', bg:'#FFF0E8' },
+  {
+    label:'고객등록', icon:'👤', col:'#15803D', bg:'#ECFDF5',
+    script:{
+      title:'📞 고객등록 단계 — 첫 연락 스크립트',
+      text:'안녕하세요, [고객명]님! 저는 한화손해보험 [이름]입니다. 오늘 잠깐 시간 괜찮으세요? 요즘 보험 관련해서 꼭 한번 확인해 드리고 싶은 내용이 있어서요. 지금 어떤 보장이 준비되어 있는지 부담 없이 한번 살펴봐 드릴게요 😊',
+    }
+  },
+  {
+    label:'보장분석', icon:'🔍', col:'#D97706', bg:'#FFFBEB',
+    script:{
+      title:'📋 보장분석 단계 — 분석 미팅 요청 스크립트',
+      text:'[고객명]님, 지난번에 말씀드린 보장 분석 건인데요. 현재 가지고 계신 보험이 실제로 필요한 부분을 잘 커버하는지 한번 같이 확인해 보시면 좋을 것 같아요. 30분 정도면 충분하고요, 편한 시간 있으시면 언제가 좋으세요?',
+    }
+  },
+  {
+    label:'가입설계', icon:'📋', col:'#1A6FD4', bg:'#EFF6FF',
+    script:{
+      title:'📊 가입설계 단계 — 설계안 제안 스크립트',
+      text:'[고객명]님, 보장 분석 결과를 바탕으로 딱 맞는 설계안을 준비했어요. 불필요한 것은 빼고, 꼭 필요한 보장만 골라서 구성했습니다. 한번 같이 확인해 보실까요? 부담 가지지 마시고 설명만 들어보셔도 됩니다!',
+    }
+  },
+  {
+    label:'보험가입', icon:'✅', col:'#9333EA', bg:'#F5F3FF',
+    script:{
+      title:'🎉 보험가입 단계 — 가입 완료 후 감사 스크립트',
+      text:'[고객명]님, 가입해 주셔서 정말 감사드립니다! 앞으로 보장이 잘 작동하는지 제가 꼼꼼히 챙겨드릴게요. 궁금하신 점이 생기면 언제든 연락 주세요. 그리고 혹시 주변에 보험 고민하는 분이 계시면 편하게 소개해 주셔도 됩니다 😊',
+    }
+  },
+  {
+    label:'지인소개', icon:'🔗', col:'#E85A00', bg:'#FFF0E8',
+    script:{
+      title:'🔗 지인소개 단계 — 소개 요청 스크립트',
+      text:'[고객명]님, 덕분에 잘 지내고 있습니다! 혹시 주변에 보험이나 노후 준비로 고민하시는 분이 계신가요? 부담 없이 한번만 소개해 주시면 제가 정성껏 도와드릴게요. 소개해 주신 분께도 최대한 도움이 되도록 최선을 다하겠습니다 🙏',
+    }
+  },
 ];
 
 function ensurePipeline(p){
@@ -145,8 +175,62 @@ function toggleStage(personId,stageIdx){
     pl.history.push({date:today,action:'check',stage:stageIdx});
     toast(PIPELINE_STAGES[stageIdx].icon+' '+PIPELINE_STAGES[stageIdx].label+' 완료!','✅');
     if(stageIdx===4) setTimeout(()=>toast(p.name+'님 지인소개까지 완료! 🎉','🎊'),800);
+    /* ─── 소개자 피드백 루프 ───
+       보험가입(인덱스3) 완료 순간, 이 고객을 소개해 준 사람에게
+       감사 알림 + 결과 공유 할 일을 자동 생성한다 */
+    if(stageIdx===3 && p.ref){
+      const refP=D.people.find(x=>x.id===p.ref);
+      if(refP){
+        if(!refP.feedbackLog) refP.feedbackLog=[];
+        refP.feedbackLog.push({
+          date:today, type:'referral_success',
+          referredId:p.id, referredName:p.name,
+        });
+        setTimeout(()=>toast(`💌 ${refP.name}님께 소개 감사 인사를 전해보세요`,'🙏'),1400);
+      }
+    }
   }
   save(); openDetail(personId);
+}
+
+/* 소개자에게 보낼 감사 피드백 처리 — feedbackLog 항목 완료 처리 */
+function resolveFeedback(personId, idx){
+  const p=D.people.find(x=>x.id===personId); if(!p||!p.feedbackLog) return;
+  const item=p.feedbackLog[idx]; if(!item||item.done) return;
+  item.done=true; item.doneDate=new Date().toISOString().slice(0,10);
+  save(); openDetail(personId);
+  toast('감사 인사 전달 완료로 기록했습니다','✅');
+}
+
+function renderFeedbackHTML(p){
+  const log=p.feedbackLog||[];
+  if(!log.length) return '';
+  const pending=log.filter(l=>!l.done);
+  const done=log.filter(l=>l.done);
+  const rows=[...pending,...done].map(item=>{
+    const idx=log.indexOf(item);
+    if(item.done){
+      return `<div class="fb-row done">
+        <span class="fb-ic">✅</span>
+        <div class="fb-body">
+          <div class="fb-title">${esc(item.referredName)}님 가입 — 감사 인사 완료</div>
+          <div class="fb-date">${esc(item.doneDate)}</div>
+        </div>
+      </div>`;
+    }
+    return `<div class="fb-row pending">
+      <span class="fb-ic">💌</span>
+      <div class="fb-body">
+        <div class="fb-title"><b>${esc(item.referredName)}</b>님이 보험에 가입했습니다!</div>
+        <div class="fb-sub">소개해 주셔서 감사하다는 인사를 전해보세요</div>
+      </div>
+      <button class="fb-btn" onclick="resolveFeedback(${p.id},${idx})">완료</button>
+    </div>`;
+  }).join('');
+  return `<div class="fb-section">
+    <div class="fb-title-main">💌 소개 감사 피드백 ${pending.length?`<span class="fb-count">${pending.length}건 대기</span>`:''}</div>
+    ${rows}
+  </div>`;
 }
 
 function renderPipelineHTML(p){
@@ -187,13 +271,32 @@ function renderPipelineHTML(p){
           <div class="pl-hist-dot" style="background:${isCheck?st.col:'#9C8878'}"></div>
           <div class="pl-hist-body">
             <span class="pl-hist-action" style="color:${isCheck?st.col:'#9C8878'}">${isCheck?'완료':'해제'}</span>
-            <span class="pl-hist-stage">${st.icon} ${esc(st.label)}</span>
+            <span class="pl-hist-stage">${esc(st.icon)} ${esc(st.label)}</span>
             <span class="pl-hist-date">${h.date}</span>
           </div>
         </div>`;
       }).join('')}
     </div>`;
   }
+
+  /* ─── 현재 진행 단계 스크립트 ─── */
+  // 완료된 마지막 단계 기준으로 현재 단계 파악
+  // 0~4: 해당 단계 완료 → 다음 단계 스크립트 표시
+  // 미시작(-1 또는 0번 미완료): 고객등록 스크립트
+  // 전부 완료(5): 지인소개 스크립트 유지
+  const currentStageIdx = completedCount === 0 ? 0
+    : completedCount >= 5 ? 4
+    : completedCount; // 완료된 수 = 다음 진행할 단계 index
+  const currentStage = PIPELINE_STAGES[currentStageIdx];
+  const scriptHTML = currentStage ? `
+    <div class="pl-script-box">
+      <div class="pl-script-head">
+        <div class="pl-script-title">${currentStage.script.title}</div>
+        <button class="pl-script-copy" onclick="copyPipelineScript(${p.id},${currentStageIdx})">📋 복사</button>
+      </div>
+      <div class="pl-script-text" id="plScript_${p.id}">${esc(currentStage.script.text)}</div>
+      ${completedCount<5?`<div class="pl-script-hint">현재 <b style="color:${currentStage.col}">${currentStage.label}</b> 단계에 맞는 스크립트입니다</div>`:'<div class="pl-script-hint">🎊 모든 단계 완료! 지인 소개 요청을 이어가세요</div>'}
+    </div>` : '';
 
   return `<div class="pl-section">
     <div class="pl-title">📊 영업 파이프라인</div>
@@ -203,6 +306,7 @@ function renderPipelineHTML(p){
     </div>
     <div class="pl-stages">${stageRows}</div>
     ${histHTML}
+    ${scriptHTML}
   </div>`;
 }
 
@@ -295,35 +399,45 @@ function initPos(){
 }
 function sim(){
   const ppl=D.people,cx=W/2,cy=H/2;
+  let totalV=0;
   for(const p of ppl){
     const pp=POS[p.id]; if(!pp||ST.dragNode===p.id) continue;
-    pp.vx+=(cx-pp.x)*.0014; pp.vy+=(cy-pp.y)*.0014;
+    // 중심 인력 — 살짝 강하게
+    pp.vx+=(cx-pp.x)*.006; pp.vy+=(cy-pp.y)*.006;
+    // 노드 간 반발
     for(const q of ppl){
       if(q.id===p.id) continue;
       const qp=POS[q.id]; if(!qp) continue;
       const dx=pp.x-qp.x,dy=pp.y-qp.y,d2=Math.max(1,dx*dx+dy*dy),d=Math.sqrt(d2),f=2800/d2;
       pp.vx+=(dx/d)*f; pp.vy+=(dy/d)*f;
     }
-    if(p.ref){const rp=POS[p.ref];if(rp){pp.vx+=(rp.x-pp.x)*.005;pp.vy+=(rp.y-pp.y)*.005;}}
-    pp.vx*=.84; pp.vy*=.84; pp.x+=pp.vx; pp.y+=pp.vy;
+    // 소개 연결 인력
+    if(p.ref){const rp=POS[p.ref];if(rp){pp.vx+=(rp.x-pp.x)*.018;pp.vy+=(rp.y-pp.y)*.018;}}
+    // 감쇠 — 더 강하게 (.84 → .72) 빠르게 멈춤
+    pp.vx*=.72; pp.vy*=.72;
+    pp.x+=pp.vx; pp.y+=pp.vy;
+    totalV+=Math.abs(pp.vx)+Math.abs(pp.vy);
   }
+  // 전체 운동량이 충분히 작으면 시뮬레이션 정지
+  ST.simActive = totalV > 0.08;
 }
+
 const w2s=(x,y)=>({sx:x*ST.zoom+ST.ox,sy:y*ST.zoom+ST.oy});
 const s2w=(sx,sy)=>({x:(sx-ST.ox)/ST.zoom,y:(sy-ST.oy)/ST.zoom});
 
 function draw(){
   ctx.clearRect(0,0,W,H);
-  // 엣지
+  // 엣지 — 선 굵기 증가
   for(const p of D.people){
     if(!p.ref) continue;
     const a=POS[p.ref],b=POS[p.id]; if(!a||!b) continue;
     const pa=w2s(a.x,a.y),pb=w2s(b.x,b.y);
     const refP=D.people.find(x=>x.id===p.ref)||{rel:'all'};
     const show=visible(p)&&visible(refP);
-    ctx.lineWidth=show?1.8:0.5;
+    ctx.lineWidth=show?3.5:0.7;          /* 1.8 → 3.5 */
     const g2=ctx.createLinearGradient(pa.sx,pa.sy,pb.sx,pb.sy);
-    g2.addColorStop(0,show?'rgba(100,140,200,.55)':'rgba(0,0,0,.04)');
-    g2.addColorStop(1,show?'rgba(60,100,180,.22)':'rgba(0,0,0,.02)');
+    g2.addColorStop(0,show?'rgba(100,140,200,.75)':'rgba(0,0,0,.04)');
+    g2.addColorStop(1,show?'rgba(60,100,180,.40)':'rgba(0,0,0,.02)');
     ctx.strokeStyle=g2;
     ctx.beginPath(); ctx.moveTo(pa.sx,pa.sy);
     ctx.quadraticCurveTo((pa.sx+pb.sx)/2,(pa.sy+pb.sy)/2-16,pb.sx,pb.sy);
@@ -331,10 +445,10 @@ function draw(){
     if(show){
       const ang=Math.atan2(pb.sy-pa.sy,pb.sx-pa.sx),rr=nodeR(p)*ST.zoom;
       const ax=pb.sx-Math.cos(ang)*rr,ay=pb.sy-Math.sin(ang)*rr;
-      ctx.fillStyle='rgba(80,130,220,.55)';
+      ctx.fillStyle='rgba(80,130,220,.80)';
       ctx.beginPath(); ctx.moveTo(ax,ay);
-      ctx.lineTo(ax-Math.cos(ang-.45)*8,ay-Math.sin(ang-.45)*8);
-      ctx.lineTo(ax-Math.cos(ang+.45)*8,ay-Math.sin(ang+.45)*8);
+      ctx.lineTo(ax-Math.cos(ang-.42)*11,ay-Math.sin(ang-.42)*11);  /* 화살표도 크게 */
+      ctx.lineTo(ax-Math.cos(ang+.42)*11,ay-Math.sin(ang+.42)*11);
       ctx.closePath(); ctx.fill();
     }
   }
@@ -365,7 +479,13 @@ function draw(){
     }
   }
 }
-function loop(){ sim(); draw(); requestAnimationFrame(loop); }
+
+/* 시뮬레이션 루프 — 안정되면 draw만, 움직임 생기면 재개 */
+function loop(){
+  if(ST.simActive!==false) sim();
+  draw();
+  requestAnimationFrame(loop);
+}
 
 /* ── 터치/마우스 인터랙션 ── */
 function nodeAt(sx,sy){
@@ -395,7 +515,7 @@ function onMv(e){
   if(pinching||!ST.drag)return;
   const{x,y}=gxy(e);
   if(Math.hypot(x-sp.x,y-sp.y)>10){moved=true;tapId=null;}
-  if(ST.dragNode){const w=s2w(x,y);POS[ST.dragNode].x=w.x;POS[ST.dragNode].y=w.y;POS[ST.dragNode].vx=POS[ST.dragNode].vy=0;}
+  if(ST.dragNode){const w=s2w(x,y);POS[ST.dragNode].x=w.x;POS[ST.dragNode].y=w.y;POS[ST.dragNode].vx=POS[ST.dragNode].vy=0; ST.simActive=true;}
   else if(ST.drag.ps){ST.ox=ST.drag.ps.ox+(x-ST.drag.x);ST.oy=ST.drag.ps.oy+(y-ST.drag.y);}
 }
 function onUp(){
@@ -458,10 +578,17 @@ document.getElementById('filterBar').addEventListener('click',e=>{
 
 /* ═══ 인맥 폼 ════════════════════════════════════════════════════ */
 document.getElementById('fabAdd').addEventListener('click',()=>openForm());
+
+function showStep(n){
+  document.getElementById('formStep1').style.display = n===1 ? '' : 'none';
+  document.getElementById('formStep2').style.display = n===2 ? '' : 'none';
+}
+
 function openForm(editId){
   ST.editId=editId||null;
   ST.relPick=editId?D.people.find(p=>p.id===editId).rel:'customer';
   document.getElementById('formTitle').textContent=editId?'인맥 수정':'인맥 추가';
+  // 소개자 목록 채우기
   const sel=document.getElementById('fRef');
   sel.innerHTML='<option value="">— 직접 알게 됨 —</option>';
   D.people.filter(p=>p.id!==editId).forEach(p=>{sel.innerHTML+=`<option value="${p.id}">${esc(p.name)} (${REL[p.rel].sh})</option>`;});
@@ -472,12 +599,54 @@ function openForm(editId){
     sel.value=p.ref||'';
     document.getElementById('fDate').value=p.lastContact||'';
     document.getElementById('fMemo').value=p.memo||'';
+    showStep(2); updateFormSummary(); // 수정 시 2단계 바로 표시
   }else{
     ['fName','fRegion','fDate','fMemo'].forEach(id=>document.getElementById(id).value='');
     sel.value='';
+    showStep(1); // 신규 추가 시 1단계부터
   }
   updateRelRow(); openSheet('shForm');
 }
+
+/* 2단계 상단 요약 (1단계 입력 내용 미리보기) */
+function updateFormSummary(){
+  const name=document.getElementById('fName').value.trim();
+  const region=document.getElementById('fRegion').value.trim();
+  const rel=REL[ST.relPick];
+  const el=document.getElementById('formSummary'); if(!el) return;
+  el.innerHTML=`<span class="step-sum-rel" style="background:${rel.col}">${rel.lbl}</span>
+    <span class="step-sum-name">${esc(name)||'이름 없음'}</span>
+    ${region?`<span class="step-sum-region">📍 ${esc(region)}</span>`:''}`;
+}
+
+/* 다음 버튼 — 1단계 유효성 검사 후 2단계 진입 */
+document.getElementById('btnStep2').addEventListener('click',()=>{
+  const name=document.getElementById('fName').value.trim();
+  if(!name){toast('이름을 입력해 주세요','⚠');document.getElementById('fName').focus();return;}
+  if(!guardSensitive([{id:'fName',label:'이름/별칭'},{id:'fRegion',label:'활동 지역'}])) return;
+  updateFormSummary();
+  showStep(2);
+});
+
+/* 이것만 저장하기 — 1단계 정보만으로 즉시 저장 */
+document.getElementById('btnSaveQuick').addEventListener('click',()=>{
+  const name=document.getElementById('fName').value.trim();
+  if(!name){toast('이름을 입력해 주세요','⚠');document.getElementById('fName').focus();return;}
+  if(!guardSensitive([{id:'fName',label:'이름/별칭'},{id:'fRegion',label:'활동 지역'}])) return;
+  const obj={
+    name, rel:ST.relPick,
+    region:document.getElementById('fRegion').value.trim(),
+    ref:null, lastContact:'', memo:'',
+  };
+  if(ST.editId){Object.assign(D.people.find(x=>x.id===ST.editId),obj);toast(name+' 수정 완료','✏');}
+  else{obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);toast(name+' 추가! 나중에 상세 정보를 입력하세요','✅');}
+  save(); ST.simActive=true; refresh(); closeSheet();
+});
+
+/* 이전으로 — 2단계 → 1단계 */
+document.getElementById('btnBackStep1').addEventListener('click',()=>showStep(1));
+
+
 function updateRelRow(){
   document.querySelectorAll('#relRow .rel-opt').forEach(o=>{
     o.classList.remove('selected'); o.style.background='';
@@ -586,11 +755,10 @@ function guardSensitive(fields) {
 document.getElementById('btnSave').addEventListener('click',()=>{
   const name=document.getElementById('fName').value.trim();
   if(!name){toast('이름을 입력하세요','⚠');return;}
-  /* 민감정보 최종 검사 */
   if(!guardSensitive([
-    {id:'fName',   label:'이름/별칭'},
-    {id:'fRegion', label:'활동 지역'},
-    {id:'fMemo',   label:'메모'},
+    {id:'fName',label:'이름/별칭'},
+    {id:'fRegion',label:'활동 지역'},
+    {id:'fMemo',label:'메모'},
   ])) return;
   const obj={
     name, rel:ST.relPick,
@@ -600,8 +768,8 @@ document.getElementById('btnSave').addEventListener('click',()=>{
     memo:document.getElementById('fMemo').value.trim(),
   };
   if(ST.editId){Object.assign(D.people.find(x=>x.id===ST.editId),obj);toast(name+' 수정 완료','✏');}
-  else{obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);toast(name+' 추가','✅');}
-  save(); refresh(); closeSheet();
+  else{obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);toast(name+' 추가 완료','✅');}
+  save(); ST.simActive=true; refresh(); closeSheet();
 });
 
 /* ═══ 상세 보기 ══════════════════════════════════════════════════ */
@@ -635,12 +803,14 @@ function openDetail(id){
       <div class="d-av" style="background:linear-gradient(135deg,${lighten(col)},${col})">${esc((p.name||'?').charAt(0))}</div>
       <div class="d-name">${esc(p.name)}${hub?' ⭐':''}</div>
       <div class="d-sub">${REL[p.rel].lbl}${p.region?' · '+esc(p.region):''}</div>
+      ${renderTempBadgeHTML(p)}
       <div class="d-chips">
         <span class="dchip" style="background:${col}22;color:${col}">${rcN}명 소개</span>
         ${hub?`<span class="dchip" style="background:var(--green-bg);color:var(--green)">핵심 허브</span>`:''}
         ${refP?`<span class="dchip" style="background:var(--blue-bg);color:var(--blue)">${esc(refP.name)} 소개</span>`:'<span class="dchip" style="background:#F5F0EB;color:var(--txt3)">직접 인맥</span>'}
       </div>
     </div>
+    ${renderFeedbackHTML(p)}
     <div class="kv-box">
       <div class="kv"><span class="k">소개해 준 사람</span><span class="v">${refP?esc(refP.name):'직접 알게 됨'}</span></div>
       <div class="kv"><span class="k">소개 경로</span><span class="v" style="max-width:64%;text-align:right">${pathHTML}</span></div>
@@ -695,8 +865,8 @@ function renderContactResultHTML(p){
     histHTML=`<div class="cr-hist">`+log.map(l=>{
       const r=CONTACT_RESULTS.find(x=>x.key===l.result)||{label:l.result,col:'#9C8878'};
       return `<div class="cr-hist-row">
-        <span class="cr-hist-date">${l.date}</span>
-        <span class="cr-hist-result" style="color:${r.col}">${r.label}</span>
+        <span class="cr-hist-date">${esc(l.date)}</span>
+        <span class="cr-hist-result" style="color:${r.col}">${esc(r.label)}</span>
       </div>`;
     }).join('')+`</div>`;
   }
@@ -708,6 +878,18 @@ function renderContactResultHTML(p){
 }
 
 
+function copyPipelineScript(personId, stageIdx){
+  const st = PIPELINE_STAGES[stageIdx];
+  if(!st) return;
+  const text = st.script.text;
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(text)
+      .then(()=>toast(st.label+' 스크립트 복사됐습니다','📋'))
+      .catch(()=>_fallbackCopy(text));
+  } else {
+    _fallbackCopy(text);
+  }
+}
 function copyScript(id){
   const p=D.people.find(x=>x.id===id); if(!p) return;
   const text=SCRIPTS[p.rel]||SCRIPTS.customer;
@@ -739,10 +921,11 @@ function renderList(){
   if(!ppl.length){box.innerHTML=`<div class="empty"><div class="empty-icon">${q?'🔍':'👥'}</div><p>${q?'검색 결과가 없습니다':'아직 등록된 인맥이 없어요<br>연결망 화면의 + 버튼으로 추가하세요'}</p></div>`;return;}
   box.innerHTML=ppl.map(p=>{
     const col=REL[p.rel].col,rcN=rc(p.id),hub=isHub(p.id),refP=p.ref?D.people.find(x=>x.id===p.ref):null;
+    const tempScore=calcRelationTemp(p), tempLv=tempLevel(tempScore);
     return `<div class="pcard" onclick="openDetail(${p.id})">
       <div class="pav" style="background:linear-gradient(135deg,${lighten(col)},${col})">${esc((p.name||'?').charAt(0))}</div>
       <div class="pi">
-        <div class="pn">${esc(p.name)}${hub?' ⭐':''}<span class="pbadge" style="background:${col}22;color:${col}">${REL[p.rel].sh}</span></div>
+        <div class="pn">${esc(p.name)}${hub?' ⭐':''}<span class="pbadge" style="background:${col}22;color:${col}">${REL[p.rel].sh}</span><span class="pn-temp" title="${tempLv.label}">${tempLv.icon}</span></div>
         <div class="pm">${p.region?esc(p.region):'지역 미입력'}${refP?' · '+esc(refP.name)+' 소개':''}</div>
       </div>
       <div class="prc"><div class="prc-n">${rcN}</div><div class="prc-l">소개</div></div>
@@ -752,6 +935,65 @@ function renderList(){
 document.getElementById('srchInput').addEventListener('input',renderList);
 
 /* ═══ 연락 알림 ══════════════════════════════════════════════════ */
+/* ═══ 관계 온도 지수 (Relationship Health Score) ═══════════════
+   세 가지 요소를 0~100점으로 합산:
+   1) 접촉 신선도 — 마지막 접촉 후 경과일 (유형별 기준일 대비)
+   2) 소개 기여도 — 이 사람이 소개해 준 인원수
+   3) 파이프라인 활력 — 진행 중인 영업이 있고 정체되지 않았는지
+   점수 → 5단계 온도로 변환: 🔥🔥🔥(뜨거움) ~ 🥶(차가움)
+════════════════════════════════════════════════════════════════ */
+function calcRelationTemp(p){
+  const thr = p.alertDays ?? DEFAULT_THR[p.rel] ?? alertThreshold;
+  const d = ago(p.lastContact);
+
+  /* 1) 접촉 신선도 (최대 50점) — 기준일 대비 경과 비율로 감점 */
+  let freshness;
+  if(d===null) freshness = 10;                       // 접촉 기록 자체가 없음
+  else if(d<=thr*0.3) freshness = 50;                 // 매우 최근
+  else if(d<=thr) freshness = 38;                     // 기준 이내
+  else if(d<=thr*2) freshness = 22;                   // 기준 1~2배 경과
+  else if(d<=thr*3) freshness = 10;                   // 기준 2~3배 경과
+  else freshness = 2;                                 // 심하게 방치
+
+  /* 2) 소개 기여도 (최대 30점) — 소개 인원수에 비례, 허브는 가산 */
+  const refCount = rc(p.id);
+  let contribution = Math.min(refCount*10, 24);
+  if(refCount>=2) contribution += 6;                  // 허브 보너스
+
+  /* 3) 파이프라인 활력 (최대 20점) */
+  let vitality = 8; // 기본값(파이프라인 없음/관계없음)
+  if(p.pipeline && p.pipeline.dates){
+    const doneCount = p.pipeline.dates.filter(Boolean).length;
+    if(doneCount>=5) vitality = 20;                   // 완주
+    else if(doneCount>0){
+      const lastDate = [...p.pipeline.dates].reverse().find(Boolean);
+      const sinceProgress = lastDate ? ago(lastDate) : null;
+      vitality = (sinceProgress!==null && sinceProgress<=14) ? 18 : 10; // 최근 진행중이면 가산
+    }
+  }
+
+  const score = Math.round(freshness + contribution + vitality);
+  return Math.max(0, Math.min(100, score));
+}
+
+function tempLevel(score){
+  if(score>=75) return { icon:'🔥🔥🔥', label:'뜨거운 관계', col:'#DC2626', bg:'#FEF2F2' };
+  if(score>=55) return { icon:'🔥🔥',   label:'좋은 관계',   col:'#EA580C', bg:'#FFF7ED' };
+  if(score>=35) return { icon:'🔥',     label:'보통',         col:'#D97706', bg:'#FFFBEB' };
+  if(score>=18) return { icon:'🧊',     label:'식어가는 중',   col:'#2563EB', bg:'#EFF6FF' };
+  return            { icon:'🥶',     label:'위험 — 끊기기 직전', col:'#475569', bg:'#F1F5F9' };
+}
+
+function renderTempBadgeHTML(p){
+  const score = calcRelationTemp(p);
+  const lv = tempLevel(score);
+  return `<div class="temp-badge" style="background:${lv.bg};border-color:${lv.col}33">
+    <span class="temp-ic">${lv.icon}</span>
+    <span class="temp-label" style="color:${lv.col}">${lv.label}</span>
+    <span class="temp-score" style="color:${lv.col}">${score}점</span>
+  </div>`;
+}
+
 function buildAlerts(threshold){
   const items=[],seen=new Set();
   D.people.forEach(p=>{
@@ -784,7 +1026,15 @@ function buildAlerts(threshold){
   });
   return items
     .filter(it=>{const k=it.p.id+'_'+it.lvl;if(seen.has(k))return false;seen.add(k);return true;})
-    .sort((a,b)=>b.lvl-a.lvl || ago(a.p.lastContact??'1900-01-01')-ago(b.p.lastContact??'1900-01-01'));
+    .sort((a,b)=>{
+      /* 1순위: 긴급도(lvl) — 높을수록 우선
+         2순위: 영향력(소개 수) — 많이 소개해준 허브 고객을 먼저
+         3순위: 경과일 — 오래 연락 안 한 순서 */
+      if(b.lvl!==a.lvl) return b.lvl-a.lvl;
+      const rcA=rc(a.p.id), rcB=rc(b.p.id);
+      if(rcB!==rcA) return rcB-rcA;
+      return ago(a.p.lastContact??'1900-01-01')-ago(b.p.lastContact??'1900-01-01');
+    });
 }
 
 function renderAlerts(){
@@ -798,10 +1048,13 @@ function renderAlerts(){
   let html='';
   if(urgent.length){
     html+=`<div class="sec-ttl">🔔 연락 필요 — 기준 ${thr}일 이상 경과 (${urgent.length}명)</div>`;
+    html+=`<div class="sort-hint">⭐ 소개를 많이 해준 고객을 우선으로 정렬했습니다</div>`;
     html+=urgent.map(it=>{
       const col=REL[it.p.rel].col;
       const d=ago(it.p.lastContact);
       const urgentClass = it.lvl>=2 ? ' urgent' : '';
+      const refCount = rc(it.p.id);
+      const hubBadge = refCount>=2 ? `<span class="hub-badge">⭐ 소개 ${refCount}명</span>` : (refCount===1 ? `<span class="ref-badge">소개 1명</span>` : '');
       return `<div class="acard${urgentClass}">
         <div class="at">
           <span style="width:9px;height:9px;border-radius:50%;background:${col};display:inline-block;flex-shrink:0"></span>
@@ -809,7 +1062,8 @@ function renderAlerts(){
           <span style="font-size:11px;color:var(--txt3)">${REL[it.p.rel].sh}${it.p.region?' · '+esc(it.p.region):''}</span>
           ${d!==null?`<span style="margin-left:auto;font-size:11px;font-weight:700;color:${it.lvl>=2?'var(--red)':'var(--amber)'}">${d}일 경과</span>`:'<span style="margin-left:auto;font-size:11px;color:var(--txt3)">기록 없음</span>'}
         </div>
-        <div class="ad">${it.reason}</div>
+        ${hubBadge?`<div class="at-badges">${hubBadge}</div>`:''}
+        <div class="ad">${esc(it.reason)}</div>
         <div class="abtn-row">
           <button class="abtn pri" onclick="markContact(${it.p.id})">오늘 접촉함</button>
           <button class="abtn sec" onclick="openDetail(${it.p.id})">상세 보기</button>
@@ -821,7 +1075,7 @@ function renderAlerts(){
     html+=`<div class="sec-ttl" style="margin-top:16px">🌱 소개 확장 여지 (${dead.length}명)</div>`;
     html+=dead.map(it=>`<div class="acard">
       <div class="at">🌱 ${esc(it.p.name)}</div>
-      <div class="ad">${it.reason}</div>
+      <div class="ad">${esc(it.reason)}</div>
       <div class="abtn-row">
         <button class="abtn pri" onclick="addReferred(${it.p.id})">소개 인맥 추가</button>
         <button class="abtn sec" onclick="openDetail(${it.p.id})">상세 보기</button>
@@ -1056,20 +1310,42 @@ document.getElementById('calNext').addEventListener('click', () => {
 });
 
 /* ═══ 내비게이션 ════════════════════════════════════════════════ */
-document.querySelectorAll('.nitem').forEach(ni=>{
-  ni.addEventListener('click',()=>{
-    document.querySelectorAll('.nitem').forEach(n=>n.classList.remove('on'));
-    ni.classList.add('on'); closeAllViews();
-    if(ni.dataset.v==='list'){document.getElementById('vList').classList.add('show');renderList();}
-    if(ni.dataset.v==='cal'){document.getElementById('vCal').classList.add('show');renderCal();}
-    if(ni.dataset.v==='alerts'){document.getElementById('vAlert').classList.add('show');renderAlerts();}
-  });
-});
-function closeAllViews(){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('show')); }
-function closeView(){
-  closeAllViews();
+function switchTab(v){
   document.querySelectorAll('.nitem').forEach(n=>n.classList.remove('on'));
-  document.querySelector('.nitem[data-v="map"]').classList.add('on');
+  const target=document.querySelector(`.nitem[data-v="${v}"]`);
+  if(target) target.classList.add('on');
+  closeAllViews();
+  if(v==='today'){
+    document.getElementById('vToday').classList.add('show');
+    renderTodayDash();
+  }
+  if(v==='map'){
+    document.getElementById('vMap').classList.add('show');
+  }
+  if(v==='list'){
+    document.getElementById('vList').classList.add('show');
+    renderList();
+  }
+  if(v==='cal'){
+    document.getElementById('vCal').classList.add('show');
+    renderCal();
+  }
+  if(v==='alerts'){
+    document.getElementById('vAlert').classList.add('show');
+    renderAlerts();
+  }
+}
+
+document.querySelectorAll('.nitem').forEach(ni=>{
+  ni.addEventListener('click',()=>switchTab(ni.dataset.v));
+});
+
+function closeAllViews(){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('show'));
+}
+function closeView(){
+  /* 뒤로가기 → 항상 오늘 할 일 탭으로 */
+  switchTab('today');
 }
 
 /* ═══ 소개 성공률 계산 ══════════════════════════════════════════
@@ -1120,58 +1396,141 @@ function refresh(){
 function renderTodayDash(){
   const box=document.getElementById('todayDash'); if(!box) return;
   const today=new Date().toISOString().slice(0,10);
-
-  // 연락 필요 (기존고객·지인 기준일 초과)
+  const now=new Date();
+  const week=['일','월','화','수','목','금','토'];
+  const dateLabel=`${now.getFullYear()}년 ${now.getMonth()+1}월 ${now.getDate()}일 (${week[now.getDay()]})`;
   const needContact=buildAlerts().filter(i=>i.lvl>0);
-
-  // 오늘 일정
-  const todayScheds=(SCHEDS||[]).filter(s=>s.date===today).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
-
-  // 파이프라인 진행 중 (현재 단계 있고 미완료)
+  const urgent     =needContact.filter(i=>i.lvl>=2);
+  const normal     =needContact.filter(i=>i.lvl===1);
+  const todayScheds=(SCHEDS||[]).filter(s=>s.date===today)
+    .sort((a,b)=>(a.time||'').localeCompare(b.time||''));
   const inProgress=D.people.filter(p=>{
-    if(!p.pipeline) return false;
-    const pl=p.pipeline;
-    const completed=pl.dates?pl.dates.filter(Boolean).length:0;
-    return completed>0 && completed<5;
+    if(!p.pipeline)return false;
+    const done=p.pipeline.dates?p.pipeline.dates.filter(Boolean).length:0;
+    return done>0&&done<5;
   });
+  /* 소개 감사 피드백 대기 목록 */
+  const pendingFeedback=[];
+  D.people.forEach(p=>{
+    (p.feedbackLog||[]).forEach(f=>{ if(!f.done) pendingFeedback.push({p, ...f}); });
+  });
+  /* 식어가는 관계 — 온도 18~34점(🧊) 구간만, 너무 많아지지 않도록 상위 3명 */
+  const cooling=D.people
+    .filter(p=>p.rel!=='prospect')
+    .map(p=>({p, score:calcRelationTemp(p)}))
+    .filter(x=>x.score>=12 && x.score<35)
+    .sort((a,b)=>a.score-b.score)
+    .slice(0,3);
 
-  // 모두 없으면 대시보드 숨기기
-  if(!needContact.length&&!todayScheds.length&&!inProgress.length){
-    box.innerHTML=''; box.style.display='none'; return;
+  let html=`<div class="td-date">${dateLabel}</div>`;
+  if(!D.people.length){
+    html+=`<div class="td-empty-home"><div class="td-empty-ic">👋</div>
+      <div class="td-empty-txt">안녕하세요!<br>오른쪽 아래 <b>＋</b> 버튼으로<br>첫 고객을 등록해보세요</div>
+      <button class="btn btn-primary td-start-btn" onclick="switchTab('map')">+ 고객 추가하러 가기</button></div>`;
+    box.innerHTML=html; return;
   }
-  box.style.display='block';
-
-  let html='<div class="td-title">📋 오늘 할 일</div>';
-
-  if(needContact.length){
-    const names=needContact.slice(0,3).map(i=>esc(i.p.name)).join(', ')+(needContact.length>3?` 외 ${needContact.length-3}명`:'');
-    html+=`<div class="td-row td-contact" onclick="document.querySelector('.nitem[data-v=alerts]').click()">
-      <span class="td-ic">📞</span>
-      <div class="td-body"><b>연락 필요 ${needContact.length}명</b><span class="td-names">${names}</span></div>
-      <span class="td-arrow">›</span>
-    </div>`;
+  if(pendingFeedback.length){
+    html+=`<div class="td-section-title" style="color:#9333EA">💌 소개 감사 인사 (${pendingFeedback.length}건)</div>`;
+    html+=pendingFeedback.slice(0,2).map(f=>`
+      <div class="td-card td-card-feedback" onclick="openDetail(${f.p.id})">
+        <div class="td-card-left">
+          <div class="td-av" style="background:#9333EA">${esc((f.p.name||'?').charAt(0))}</div>
+          <div><div class="td-card-name">${esc(f.p.name)}님께 감사 인사</div>
+          <div class="td-card-sub">${esc(f.referredName)}님이 가입 완료했어요</div></div>
+        </div>
+      </div>`).join('');
+  }
+  if(cooling.length){
+    html+=`<div class="td-section-title" style="color:#2563EB">🧊 관계가 식어가고 있어요 (${cooling.length}명)</div>`;
+    html+=cooling.map(({p,score})=>{
+      const lv=tempLevel(score);
+      return `<div class="td-card td-card-cooling" onclick="openDetail(${p.id})">
+        <div class="td-card-left">
+          <div class="td-av" style="background:${REL[p.rel].col}">${esc((p.name||'?').charAt(0))}</div>
+          <div><div class="td-card-name">${esc(p.name)}</div>
+          <div class="td-card-sub">${lv.icon} ${lv.label} · ${score}점</div></div>
+        </div>
+        <button class="td-contact-btn sec" onclick="event.stopPropagation();markContact(${p.id})">접촉함 ✓</button>
+      </div>`;
+    }).join('');
+  }
+  if(urgent.length){
+    html+=`<div class="td-section-title td-urgent-title">🚨 지금 바로 연락하세요 (${urgent.length}명)</div>`;
+    html+=urgent.slice(0,3).map(it=>{
+      const d=ago(it.p.lastContact);
+      const refCount=rc(it.p.id);
+      const hubMark = refCount>=2 ? ' · ⭐허브' : '';
+      return `<div class="td-card td-card-urgent" onclick="openDetail(${it.p.id})">
+        <div class="td-card-left">
+          <div class="td-av" style="background:${REL[it.p.rel].col}">${esc((it.p.name||'?').charAt(0))}</div>
+          <div><div class="td-card-name">${esc(it.p.name)}</div>
+          <div class="td-card-sub">${REL[it.p.rel].lbl}${it.p.region?' · '+esc(it.p.region):''}${hubMark}</div></div>
+        </div>
+        <div class="td-card-right">
+          <div class="td-days-badge urgent">${d!==null?d+'일':'-'}</div>
+          <button class="td-contact-btn" onclick="event.stopPropagation();markContact(${it.p.id})">접촉함 ✓</button>
+        </div></div>`;
+    }).join('');
+    if(urgent.length>3) html+=`<div class="td-more" onclick="switchTab('alerts')">+ ${urgent.length-3}명 더 보기 →</div>`;
+  }
+  if(normal.length){
+    html+=`<div class="td-section-title">📞 연락이 필요해요 (${normal.length}명)</div>`;
+    html+=normal.slice(0,2).map(it=>{
+      const d=ago(it.p.lastContact);
+      const refCount=rc(it.p.id);
+      const hubMark = refCount>=2 ? ' · ⭐허브' : '';
+      return `<div class="td-card td-card-normal" onclick="openDetail(${it.p.id})">
+        <div class="td-card-left">
+          <div class="td-av" style="background:${REL[it.p.rel].col}">${esc((it.p.name||'?').charAt(0))}</div>
+          <div><div class="td-card-name">${esc(it.p.name)}</div>
+          <div class="td-card-sub">${REL[it.p.rel].lbl}${it.p.region?' · '+esc(it.p.region):''}${hubMark}</div></div>
+        </div>
+        <div class="td-card-right">
+          <div class="td-days-badge normal">${d!==null?d+'일':'-'}</div>
+          <button class="td-contact-btn sec" onclick="event.stopPropagation();markContact(${it.p.id})">접촉함 ✓</button>
+        </div></div>`;
+    }).join('');
+    if(normal.length>2) html+=`<div class="td-more" onclick="switchTab('alerts')">+ ${normal.length-2}명 더 보기 →</div>`;
   }
   if(todayScheds.length){
-    const first=todayScheds[0];
-    const personName=first.personId?D.people.find(p=>p.id===first.personId)?.name:'';
-    html+=`<div class="td-row td-sched" onclick="document.querySelector('.nitem[data-v=cal]').click()">
-      <span class="td-ic">📅</span>
-      <div class="td-body"><b>오늘 일정 ${todayScheds.length}건</b><span class="td-names">${first.time?first.time+' ':''} ${esc(first.title)}${personName?' ('+esc(personName)+')':''}</span></div>
-      <span class="td-arrow">›</span>
-    </div>`;
+    html+=`<div class="td-section-title">📅 오늘 일정 (${todayScheds.length}건)</div>`;
+    html+=todayScheds.map(s=>{
+      const person=s.personId?D.people.find(p=>p.id===s.personId):null;
+      return `<div class="td-card td-card-sched" onclick="switchTab('cal')">
+        <div class="td-sched-time">${esc(s.time||'—')}</div>
+        <div class="td-sched-info">
+          <div class="td-card-name">${esc(s.title)}</div>
+          ${person?`<div class="td-card-sub">👤 ${esc(person.name)} (${REL[person.rel].sh})</div>`:''}
+        </div></div>`;
+    }).join('');
   }
   if(inProgress.length){
     const stages=['고객등록','보장분석','가입설계','보험가입','지인소개'];
-    const cur=inProgress[0];
-    const pl=ensurePipeline(cur);
-    const curStage=pl.dates.filter(Boolean).length;
-    html+=`<div class="td-row td-pipe" onclick="openDetail(${inProgress[0].id})">
-      <span class="td-ic">⚡</span>
-      <div class="td-body"><b>영업 진행 중 ${inProgress.length}명</b><span class="td-names">${esc(cur.name)} — ${stages[curStage]||'완료'} 단계</span></div>
-      <span class="td-arrow">›</span>
-    </div>`;
+    html+=`<div class="td-section-title">⚡ 영업 진행 중 (${inProgress.length}명)</div>`;
+    html+=inProgress.slice(0,3).map(p=>{
+      const pl=ensurePipeline(p);
+      const curStage=pl.dates.filter(Boolean).length;
+      const pct=Math.round(curStage/5*100);
+      return `<div class="td-card td-card-pipe" onclick="openDetail(${p.id})">
+        <div class="td-card-left">
+          <div class="td-av" style="background:${REL[p.rel].col}">${esc((p.name||'?').charAt(0))}</div>
+          <div><div class="td-card-name">${esc(p.name)}</div>
+          <div class="td-card-sub">${stages[curStage]||'완료'} 단계</div></div>
+        </div>
+        <div class="td-card-right"><div class="td-pipe-pct">${pct}%</div></div>
+      </div>`;
+    }).join('');
   }
-
+  if(!urgent.length&&!normal.length&&!todayScheds.length&&!inProgress.length){
+    html+=`<div class="td-all-ok"><div class="td-ok-ic">🎉</div>
+      <div class="td-ok-txt">오늘 할 일이 없습니다<br>잘 관리하고 계세요!</div></div>`;
+  }
+  html+=`<div class="td-quick">
+    <button class="td-q-btn" onclick="switchTab('map')">🔗<span>연결망</span></button>
+    <button class="td-q-btn" onclick="switchTab('list')">👥<span>인맥 목록</span></button>
+    <button class="td-q-btn" onclick="switchTab('cal')">📅<span>일정</span></button>
+    <button class="td-q-btn" onclick="switchTab('alerts')">🔔<span>알림</span></button>
+  </div>`;
   box.innerHTML=html;
 }
 
@@ -1551,6 +1910,7 @@ async function init(){
   await load();        /* 암호화 복호화 완료 후 진행 */
   await loadScheds();
   resize(); initPos(); refresh(); loop(); checkLock();
+  switchTab('today');   /* 앱 시작 시 오늘 할 일 탭으로 */
   checkOnboard();
   window.addEventListener('resize',resize);
   registerSW();

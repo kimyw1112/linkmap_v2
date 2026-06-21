@@ -3,13 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<!-- ── 보안 헤더 ── -->
+<!-- Clickjacking 방지: iframe 삽입 차단 -->
+<meta http-equiv="X-Frame-Options" content="DENY">
+<!-- Referrer 정보 외부 유출 방지 -->
+<meta name="referrer" content="no-referrer">
+<!-- Content Security Policy: 외부 스크립트·스타일·이미지 차단 -->
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'self';
+           script-src 'self' 'unsafe-inline';
+           style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net;
+           font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net;
+           img-src 'self' data: blob:;
+           connect-src 'self';
+           frame-ancestors 'none';">
+<!-- HTTPS 강제 (GitHub Pages는 HTTPS이므로 항상 적용) -->
+<meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains">
 <meta name="theme-color" content="#E85A00">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <title>LinkMap</title>
-<link rel="stylesheet" href="style.css?v=20260619">
+<link rel="stylesheet" href="style.css?v=202606210000">
 <style>
 /* ─── 앱 셸 ────────────────────────────────────────────────── */
 html,body { height:100%; overflow:hidden; background:var(--bg); }
@@ -198,21 +214,25 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
   </div>
 
   <!-- 캔버스 -->
-  <!-- 오늘 할 일 대시보드 -->
-  <div id="todayDash" style="display:none"></div>
-
-  <!-- 연결망 + 온보딩 오버레이 -->
-  <div id="onboardOverlay" class="onboard-overlay" style="display:none">
-    <div class="onboard-card">
-      <div class="onboard-ic">🔗</div>
-      <h3>LinkMap에 오신 것을 환영합니다!</h3>
-      <p>소개 영업 관리를 시작해 보세요<br>먼저 고객을 등록하거나<br>샘플로 둘러볼 수 있습니다</p>
-      <button class="btn btn-primary" onclick="startWithSample()" style="margin-bottom:10px">✨ 샘플로 먼저 둘러보기</button>
-      <button class="btn btn-ghost" onclick="closeOnboard()">+ 직접 고객 추가하기</button>
-    </div>
+  <!-- 오늘 할 일 뷰 (메인 첫 화면) -->
+  <div class="view show" id="vToday">
+    <div id="todayDash"></div>
   </div>
 
-  <div class="map-wrap" id="mapWrap">
+  <!-- 연결망 뷰 -->
+  <div class="view" id="vMap">
+    <!-- 온보딩 오버레이 -->
+    <div id="onboardOverlay" class="onboard-overlay" style="display:none">
+      <div class="onboard-card">
+        <div class="onboard-ic">🔗</div>
+        <h3>LinkMap에 오신 것을 환영합니다!</h3>
+        <p>소개 영업 관리를 시작해 보세요<br>먼저 고객을 등록하거나<br>샘플로 둘러볼 수 있습니다</p>
+        <button class="btn btn-primary" onclick="startWithSample()" style="margin-bottom:10px">✨ 샘플로 먼저 둘러보기</button>
+        <button class="btn btn-ghost" onclick="closeOnboard()">+ 직접 고객 추가하기</button>
+      </div>
+    </div>
+
+    <div class="map-wrap" id="mapWrap">
     <canvas id="cvs"></canvas>
 
     <div class="filter-pills" id="filterBar">
@@ -244,7 +264,8 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
       <h3>나의 소개 연결망을 만들어 보세요</h3>
       <p>아래 <b>＋</b> 버튼으로 고객·지인을 추가하고<br>누가 누구를 소개했는지 연결하면<br>나만의 관계망이 그려집니다</p>
     </div>
-  </div>
+  </div><!-- /mapWrap -->
+  </div><!-- /vMap -->
 
   <!-- 인맥 목록 뷰 -->
   <div class="view" id="vList">
@@ -312,7 +333,8 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
 
   <!-- 하단 탭 -->
   <nav class="nav">
-    <div class="nitem on" data-v="map">    <span class="nic">🔗</span><span class="nlb">연결망</span></div>
+    <div class="nitem on" data-v="today">  <span class="nic">🏠</span><span class="nlb">오늘 할 일</span></div>
+    <div class="nitem"    data-v="map">    <span class="nic">🔗</span><span class="nlb">연결망</span></div>
     <div class="nitem"    data-v="list">   <span class="nic">👥</span><span class="nlb">인맥 목록</span></div>
     <div class="nitem"    data-v="cal">    <span class="nic">📅</span><span class="nlb">일정</span></div>
     <div class="nitem"    data-v="alerts"> <span class="nic">🔔</span><span class="nlb">알림</span></div>
@@ -356,20 +378,55 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
     <button class="icon-btn" onclick="closeSheet()">✕</button>
   </div>
   <div class="sheet-body">
-    <div class="field">
-      <label>관계 유형 *</label>
-      <div class="rel-row" id="relRow">
-        <div class="rel-opt" data-r="customer">기존 고객</div>
-        <div class="rel-opt" data-r="friend">지인</div>
-        <div class="rel-opt" data-r="prospect">신규 고객</div>
+
+    <!-- ── 1단계: 필수 정보 ── -->
+    <div id="formStep1">
+      <div class="step-badge">1단계 · 필수 정보</div>
+      <div class="field">
+        <label>관계 유형 *</label>
+        <div class="rel-row" id="relRow">
+          <div class="rel-opt" data-r="customer">기존 고객</div>
+          <div class="rel-opt" data-r="friend">지인</div>
+          <div class="rel-opt" data-r="prospect">신규 고객</div>
+        </div>
       </div>
+      <div class="field">
+        <label>이름 / 별칭 *</label>
+        <input id="fName" type="text" placeholder="예: 김OO  또는  헬스장 형">
+        <div class="hint">실명 대신 별칭 사용을 권장합니다</div>
+      </div>
+      <div class="field">
+        <label>활동 지역</label>
+        <input id="fRegion" type="text" placeholder="예: 성남시 분당구">
+        <div class="hint">입력하면 커뮤니티 검색 기능이 활성화됩니다</div>
+      </div>
+      <button class="btn btn-primary" id="btnStep2">다음 →  상세 정보 입력</button>
+      <button class="btn btn-ghost"   id="btnSaveQuick" style="margin-top:8px">이것만 저장하기</button>
     </div>
-    <div class="field"><label>이름 / 별칭 *</label><input id="fName" type="text" placeholder="예: 김OO  또는  헬스장 형"><div class="hint">별칭 사용을 권장합니다</div></div>
-    <div class="field"><label>활동 지역</label><input id="fRegion" type="text" placeholder="예: 성남시 분당구"><div class="hint">입력하면 커뮤니티 검색 기능이 활성화됩니다</div></div>
-    <div class="field"><label>소개해 준 사람</label><select id="fRef"><option value="">— 직접 알게 됨 —</option></select><div class="hint">선택하면 연결선이 자동 생성됩니다</div></div>
-    <div class="field"><label>최근 접촉일</label><input id="fDate" type="date"></div>
-    <div class="field"><label>메모</label><textarea id="fMemo" placeholder="예: 자녀 2명, 자영업"></textarea><div class="hint-warn">⚠ 주민번호·연락처·계약금액 등 민감정보는 입력하지 마세요</div></div>
-    <button class="btn btn-primary" id="btnSave">저장하기</button>
+
+    <!-- ── 2단계: 상세 정보 ── -->
+    <div id="formStep2" style="display:none">
+      <div class="step-badge step-badge-2">2단계 · 상세 정보 (선택)</div>
+      <div class="step-summary" id="formSummary"></div>
+      <div class="field">
+        <label>소개해 준 사람</label>
+        <select id="fRef"><option value="">— 직접 알게 됨 —</option></select>
+        <div class="hint">선택하면 연결망에 화살표가 자동 생성됩니다</div>
+      </div>
+      <div class="field">
+        <label>최근 접촉일</label>
+        <input id="fDate" type="date">
+        <div class="hint">입력하면 연락 알림을 받을 수 있습니다</div>
+      </div>
+      <div class="field">
+        <label>메모</label>
+        <textarea id="fMemo" placeholder="예: 자녀 2명, 자영업"></textarea>
+        <div class="hint-warn">⚠ 주민번호·연락처·계약금액 등 민감정보는 입력하지 마세요</div>
+      </div>
+      <button class="btn btn-primary" id="btnSave">저장하기</button>
+      <button class="btn btn-ghost" id="btnBackStep1" style="margin-top:8px">← 이전으로</button>
+    </div>
+
   </div>
 </div>
 
@@ -408,6 +465,6 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
 <!-- 토스트 -->
 <div id="toast"></div>
 
-<script src="app.js?v=20260619"></script>
+<script src="app.js?v=202606210000"></script>
 </body>
 </html>
