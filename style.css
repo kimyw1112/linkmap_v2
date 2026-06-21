@@ -1687,3 +1687,56 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
   pointer-events: auto;
 }
 .guide-keep-btn:active { background: var(--border); }
+
+/* ═══ 접촉 유형 버튼 (상세 화면) ════════════════════════════════ */
+.contact-btn-row {
+  display: flex; gap: 8px; margin-bottom: 8px;
+}
+.contact-btn-meeting,
+.contact-btn-call {
+  flex: 1; height: 52px; border-radius: 14px;
+  font-size: 15px; font-weight: 700; cursor: pointer;
+  border: none; transition: opacity .15s, transform .12s;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+}
+.contact-btn-meeting {
+  background: linear-gradient(135deg, #059669, #047857);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(5,150,105,.25);
+}
+.contact-btn-call {
+  background: linear-gradient(135deg, #1A6FD4, #1558B0);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(26,111,212,.25);
+}
+.contact-btn-meeting:active,
+.contact-btn-call:active { opacity: .85; transform: scale(.98); }
+
+/* 접촉 유형 아이콘 (kv-box) */
+.contact-type-ic {
+  font-size: 12px; font-weight: 700;
+  padding: 2px 7px; border-radius: 6px;
+  background: var(--bg2); color: var(--txt2);
+  margin-right: 2px;
+}
+
+/* ═══ 오늘 할 일 카드 — 접촉 버튼 2개 ══════════════════════════ */
+.today-pick-contact-row {
+  display: flex; gap: 8px;
+}
+.today-pick-btn-half {
+  flex: 1; height: 50px; border-radius: 13px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  border: none; color: #fff;
+  transition: opacity .15s;
+  display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.today-pick-btn-half.meeting {
+  background: linear-gradient(135deg, #059669, #047857);
+  box-shadow: 0 3px 12px rgba(5,150,105,.25);
+}
+.today-pick-btn-half.call {
+  background: linear-gradient(135deg, #1A6FD4, #1558B0);
+  box-shadow: 0 3px 12px rgba(26,111,212,.22);
+}
+.today-pick-btn-half:active { opacity: .82; }
