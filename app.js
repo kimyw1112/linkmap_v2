@@ -733,7 +733,8 @@ document.getElementById('btnStep1Skip').addEventListener('click',()=>{
   const name=document.getElementById('fName').value.trim();
   if(!name){toast('이름을 입력하세요','⚠');return;}
   if(!guardSensitive([{id:'fName',label:'이름/별칭'}])) return;
-  const obj={name,rel:ST.relPick,region:'',ref:null,lastContact:'',memo:''};
+  const refVal = document.getElementById('fRef').value;
+  const obj={name,rel:ST.relPick,region:'',ref:refVal?+refVal:null,lastContact:'',memo:''};
   if(ST.editId){Object.assign(D.people.find(x=>x.id===ST.editId),obj);toast(name+' 수정 완료','✏');}
   else{obj.id=D.nid++;obj.created=new Date().toISOString();D.people.push(obj);toast(name+' 추가 완료 — 나중에 상세정보를 채워보세요','✅');}
   save(); refresh(); closeSheet();
@@ -1410,14 +1411,14 @@ document.getElementById('alertFilterRow').addEventListener('click', e=>{
   } else {
     customWrap.classList.add('hide');
     alertThreshold = +btn.dataset.d;
-    renderAlerts();
+    renderAlerts(); renderTodayDash();
   }
 });
 document.getElementById('afApply').addEventListener('click', ()=>{
   const v = parseInt(document.getElementById('afCustomInput').value);
   if(!v||v<1){toast('올바른 일 수를 입력하세요','⚠');return;}
   alertThreshold = v;
-  renderAlerts();
+  renderAlerts(); renderTodayDash();
   toast(`기준일 ${v}일로 변경됐습니다`,'🔔');
 });
 document.getElementById('afCustomInput').addEventListener('keydown', e=>{
@@ -1793,6 +1794,50 @@ function startWithSample(){
   document.getElementById('onboardOverlay').style.display = 'none';
   localStorage.setItem('lm_onboard_seen','1');
   loadSample();
+  /* 샘플 로드 후 가이드 시작 */
+  setTimeout(()=> guideGoTo(1), 400);
+}
+
+/* ─── 샘플 튜토리얼 가이드 ─── */
+function guideGoTo(n){
+  const overlay = document.getElementById('guideOverlay');
+  overlay.style.display = 'block';
+
+  /* 모든 step 숨김 */
+  [1,2,3,4].forEach(i => {
+    const el = document.getElementById('guideStep'+i);
+    if(el) el.classList.toggle('hide', i!==n);
+  });
+
+  /* 가이드 단계별 탭 이동 */
+  if(n===1){
+    /* 오늘 할 일 탭으로 */
+    document.querySelector('.nitem[data-v="today"]').click();
+  } else if(n===3){
+    /* 연결망 탭으로 */
+    document.querySelector('.nitem[data-v="map"]').click();
+  } else if(n===2 || n===4){
+    /* 오늘 할 일 탭으로 복귀 */
+    document.querySelector('.nitem[data-v="today"]').click();
+  }
+}
+
+function finishGuide(){
+  /* 샘플 데이터 전체 삭제 */
+  D = { people:[], nid:1 };
+  Object.keys(POS).forEach(k=>delete POS[k]);
+  SCHEDS = [];
+  saveScheds();
+  save(); refresh();
+
+  /* 가이드 닫기 */
+  document.getElementById('guideOverlay').style.display = 'none';
+
+  /* 인맥 추가 폼 열기 */
+  setTimeout(()=>{
+    toast('샘플이 삭제됐습니다. 첫 번째 인맥을 등록해보세요!','✨');
+    openForm();
+  }, 300);
 }
 
 /* ═══ 통계 갱신 ═════════════════════════════════════════════════ */

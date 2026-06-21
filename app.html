@@ -85,16 +85,16 @@
       <div class="ob-skip" onclick="skipOnboard()">건너뛰기</div>
       <div class="ob-visual">
         <div class="ob-feature-list">
-          <div class="ob-feat"><span class="ob-feat-ic">📞</span><div><b>연락 타이밍 알림</b><br>놓치기 전에 먼저 알려드려요</div></div>
-          <div class="ob-feat"><span class="ob-feat-ic">📊</span><div><b>5단계 영업 파이프라인</b><br>고객 등록부터 지인소개까지</div></div>
-          <div class="ob-feat"><span class="ob-feat-ic">🌡</span><div><b>관계 온도 지수</b><br>관계가 식기 전에 관리하세요</div></div>
+          <div class="ob-feat"><span class="ob-feat-ic">🌡</span><div><b>관계 온도 지수</b><br>온도가 낮은 분부터 연락하면 돼요</div></div>
+          <div class="ob-feat"><span class="ob-feat-ic">📊</span><div><b>4단계 영업 파이프라인</b><br>고객 등록부터 보험가입까지</div></div>
+          <div class="ob-feat"><span class="ob-feat-ic">🤝</span><div><b>소개 요청 결과 기록</b><br>누가 소개해줬는지 한눈에 확인</div></div>
           <div class="ob-feat"><span class="ob-feat-ic">📅</span><div><b>미팅 일정 관리</b><br>인맥과 연결된 일정을 등록하세요</div></div>
         </div>
       </div>
       <div class="ob-content">
         <div class="ob-step">2 / 3</div>
         <h2 class="ob-title">영업에 필요한 모든 것</h2>
-        <p class="ob-desc">연락, 일정, 파이프라인, 스크립트까지<br>하나의 앱에서 관리할 수 있어요.</p>
+        <p class="ob-desc">연락, 일정, 파이프라인, 소개 요청까지<br>하나의 앱에서 관리할 수 있어요.</p>
       </div>
       <div class="ob-actions">
         <button class="ob-back" onclick="obGoTo(1)">← 이전</button>
@@ -109,7 +109,7 @@
         <div class="ob-choice-card" onclick="startWithSample()">
           <div class="ob-choice-ic">✨</div>
           <div class="ob-choice-title">샘플로 체험하기</div>
-          <div class="ob-choice-desc">미리 입력된 예시 데이터로<br>앱 기능을 먼저 살펴봐요</div>
+          <div class="ob-choice-desc">예시 데이터로 앱을<br>먼저 둘러봐요</div>
         </div>
         <div class="ob-choice-card ob-choice-primary" onclick="skipOnboard()">
           <div class="ob-choice-ic">➕</div>
@@ -120,7 +120,7 @@
       <div class="ob-content">
         <div class="ob-step">3 / 3</div>
         <h2 class="ob-title">어떻게 시작할까요?</h2>
-        <p class="ob-desc">샘플 데이터는 나중에 설정에서<br>언제든지 삭제할 수 있습니다.</p>
+        <p class="ob-desc">샘플 체험 후 튜토리얼이 끝나면<br>샘플 데이터는 자동으로 삭제됩니다.</p>
       </div>
       <div class="ob-actions ob-actions-back">
         <button class="ob-back" onclick="obGoTo(2)">← 이전</button>
@@ -129,6 +129,67 @@
     </div>
 
   </div><!-- /#onboardOverlay -->
+
+  <!-- ─── 샘플 튜토리얼 가이드 오버레이 (샘플 체험 시) ─── -->
+  <div id="guideOverlay" style="display:none">
+    <div class="guide-backdrop"></div>
+
+    <!-- 가이드 1: 오늘 할 일 탭 -->
+    <div class="guide-step" id="guideStep1">
+      <div class="guide-highlight guide-hl-today"></div>
+      <div class="guide-bubble guide-bubble-bottom">
+        <div class="guide-bubble-ic">📋</div>
+        <div class="guide-bubble-title">오늘 할 일 탭</div>
+        <div class="guide-bubble-desc">관계 온도가 낮은 분부터 위에 표시돼요.<br>온도가 낮을수록 먼저 연락해야 할 분이에요.</div>
+        <div class="guide-bubble-step">1 / 4</div>
+        <button class="guide-next-btn" onclick="guideGoTo(2)">다음 →</button>
+      </div>
+    </div>
+
+    <!-- 가이드 2: 상세 시트 소개 요청 -->
+    <div class="guide-step hide" id="guideStep2">
+      <div class="guide-highlight guide-hl-detail"></div>
+      <div class="guide-bubble guide-bubble-center">
+        <div class="guide-bubble-ic">🤝</div>
+        <div class="guide-bubble-title">소개 요청 결과 기록</div>
+        <div class="guide-bubble-desc">인물을 탭하면 상세 화면이 열려요.<br>연락 후 소개 요청 결과를 꼭 기록해 두세요.</div>
+        <div class="guide-bubble-step">2 / 4</div>
+        <div class="guide-btn-row">
+          <button class="guide-back-btn" onclick="guideGoTo(1)">← 이전</button>
+          <button class="guide-next-btn" onclick="guideGoTo(3)">다음 →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 가이드 3: 연결망 탭 -->
+    <div class="guide-step hide" id="guideStep3">
+      <div class="guide-highlight guide-hl-map"></div>
+      <div class="guide-bubble guide-bubble-top">
+        <div class="guide-bubble-ic">🔗</div>
+        <div class="guide-bubble-title">소개 연결망</div>
+        <div class="guide-bubble-desc">소개 관계가 선으로 자동 연결돼요.<br>⭐ 별이 붙은 분이 핵심 허브 고객이에요.</div>
+        <div class="guide-bubble-step">3 / 4</div>
+        <div class="guide-btn-row">
+          <button class="guide-back-btn" onclick="guideGoTo(2)">← 이전</button>
+          <button class="guide-next-btn" onclick="guideGoTo(4)">다음 →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 가이드 4: 시작 -->
+    <div class="guide-step hide" id="guideStep4">
+      <div class="guide-finish-card">
+        <div class="guide-finish-ic">🎉</div>
+        <div class="guide-finish-title">이제 직접 시작해볼까요?</div>
+        <div class="guide-finish-desc">샘플 데이터를 삭제하고<br>내 고객을 직접 등록해보세요.</div>
+        <button class="guide-start-btn" onclick="finishGuide()">
+          ✅ 샘플 삭제하고 시작하기
+        </button>
+        <button class="guide-back-btn2" onclick="guideGoTo(3)">← 이전으로</button>
+      </div>
+    </div>
+
+  </div><!-- /#guideOverlay -->
 
   <!-- ─── 연결망 뷰 ─── -->
   <div class="main-view" id="vMap">
