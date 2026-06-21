@@ -378,96 +378,112 @@ function initPos(){
 
 function _doFullLayout(ppl){
   const cx = W/2, cy = H/2;
+  const placed = new Set();
 
-  const sorted = [...ppl].sort((a,b) => rc(b.id) - rc(a.id));
-  const hubs      = sorted.filter(p => rc(p.id) >= 2);
-  const placed    = new Set();
+  /* 자손 수 추정 (각도 분배용) */
+  function subtreeSize(p){
+    const children = ppl.filter(c=>c.ref===p.id);
+    if(!children.length) return 1;
+    return children.reduce((s,c)=>s+subtreeSize(c), 0);
+  }
 
-  /* ─── 허브 배치 ─── */
-  /* 허브가 1개면 중심, 2개 이상이면 중심 기준 충분히 벌려서 배치 */
-  const hubGap = Math.max(130, W * 0.22);
-  hubs.forEach((p, i) => {
-    let x, y;
-    if(hubs.length === 1){
-      x = cx; y = cy;
-    } else {
-      const a = (i / hubs.length) * Math.PI * 2 - Math.PI/2;
-      x = cx + Math.cos(a) * hubGap;
-      y = cy + Math.sin(a) * hubGap;
-    }
+  /* 재귀 트리 배치
+     px/py: 부모 위치, angle: 부모→나 방향, depth: 깊이, spread: 허용 각도 */
+  function placeTree(p, px, py, angle, depth, spread){
+    if(placed.has(p.id)) return;
+    const myR = nodeR(p);
+    const dist = Math.max(myR * 2 + 55, 105 - depth * 6);
+    const x = _clamp(px + Math.cos(angle) * dist, 46, W-46);
+    const y = _clamp(py + Math.sin(angle) * dist, 46, H-46);
     POS[p.id] = { x, y };
     placed.add(p.id);
+
+    const children = ppl.filter(c => c.ref === p.id && !placed.has(c.id));
+    if(!children.length) return;
+    const childSpread = Math.min(spread * 0.88, Math.PI * 1.5);
+    const sizes = children.map(c => Math.max(1, subtreeSize(c)));
+    const total = sizes.reduce((s,v)=>s+v, 0);
+    let cum = angle - childSpread / 2;
+    children.forEach((child, i) => {
+      const slice = (sizes[i] / total) * childSpread;
+      placeTree(child, x, y, cum + slice/2, depth+1, slice);
+      cum += slice;
+    });
+  }
+
+  /* 루트(ref 없는 노드 또는 부모 없는 고아) */
+  const roots = ppl.filter(p => {
+    if(!p.ref) return true;
+    return !ppl.find(q=>q.id===p.ref);
   });
 
-  /* ─── 허브 자식 배치 ─── */
-  hubs.forEach(hub => {
-    const children = ppl.filter(p => p.ref === hub.id && !placed.has(p.id));
-    if(!children.length) return;
-    const rHub   = nodeR(hub);
-    /* 자식 간격: 자식 노드 지름 + 여유 30px */
-    const childDiam   = nodeR(children[0]) * 2 + 30;
-    const circumNeeded = childDiam * children.length;
-    /* 원 반경 = 둘레가 자식들 간격을 충분히 수용하는 크기 */
-    const orbitR = Math.max(rHub + 75, circumNeeded / (2 * Math.PI));
-    /* 부모와 연결되지 않는 방향(위쪽)부터 시작 */
+  if(roots.length === 1){
+    const root = roots[0];
+    POS[root.id] = { x: cx, y: cy };
+    placed.add(root.id);
+    const children = ppl.filter(c=>c.ref===root.id);
+    const n = children.length || 1;
+    const sizes = children.map(c=>Math.max(1, subtreeSize(c)));
+    const total = sizes.reduce((s,v)=>s+v, 0);
+    let cum = -Math.PI/2;
     children.forEach((child, i) => {
-      const a = (i / children.length) * Math.PI * 2 - Math.PI/2;
-      const nx = POS[hub.id].x + Math.cos(a) * orbitR;
-      const ny = POS[hub.id].y + Math.sin(a) * orbitR;
-      POS[child.id] = { x: _clamp(nx, 36, W-36), y: _clamp(ny, 36, H-36) };
-      placed.add(child.id);
-
-      /* 손자 배치 */
-      const grandChildren = ppl.filter(p => p.ref === child.id && !placed.has(p.id));
-      if(!grandChildren.length) return;
-      const gcDiam  = nodeR(grandChildren[0]) * 2 + 24;
-      const gcOrbit = Math.max(nodeR(child) + 60, gcDiam * grandChildren.length / (2*Math.PI));
-      grandChildren.forEach((gc, j) => {
-        /* 부모 방향 반대쪽으로 펼침 */
-        const ga = a + (j - (grandChildren.length-1)/2) * (Math.PI * 2 / Math.max(grandChildren.length, 3));
-        POS[gc.id] = {
-          x: _clamp(POS[child.id].x + Math.cos(ga)*gcOrbit, 36, W-36),
-          y: _clamp(POS[child.id].y + Math.sin(ga)*gcOrbit, 36, H-36)
-        };
-        placed.add(gc.id);
+      const slice = (sizes[i]/total) * Math.PI * 2;
+      placeTree(child, cx, cy, cum + slice/2, 1, slice);
+      cum += slice;
+    });
+  } else {
+    const rootR = Math.min(W, H) * 0.26;
+    roots.forEach((root, i) => {
+      const angle = (i/roots.length)*Math.PI*2 - Math.PI/2;
+      const rx = _clamp(cx + Math.cos(angle)*rootR, 46, W-46);
+      const ry = _clamp(cy + Math.sin(angle)*rootR, 46, H-46);
+      POS[root.id] = { x: rx, y: ry };
+      placed.add(root.id);
+      const children = ppl.filter(c=>c.ref===root.id);
+      const n = children.length || 1;
+      const spread = Math.PI * 1.4;
+      const sizes = children.map(c=>Math.max(1, subtreeSize(c)));
+      const total = sizes.reduce((s,v)=>s+v, 0);
+      let cum = angle - spread/2;
+      children.forEach((child, i) => {
+        const slice = (sizes[i]/total)*spread;
+        placeTree(child, rx, ry, cum+slice/2, 1, slice);
+        cum += slice;
       });
     });
+  }
+
+  /* 미배치 고아 외곽 */
+  const remaining = ppl.filter(p=>!placed.has(p.id));
+  remaining.forEach((p,i)=>{
+    const a=(i/Math.max(1,remaining.length))*Math.PI*2;
+    POS[p.id]={ x:_clamp(cx+Math.cos(a)*Math.min(W,H)*0.42,46,W-46), y:_clamp(cy+Math.sin(a)*Math.min(W,H)*0.42,46,H-46) };
   });
 
-  /* ─── 나머지(독립 노드) 외곽 배치 ─── */
-  const remaining = ppl.filter(p => !placed.has(p.id));
-  const outerR    = Math.min(W, H) * 0.40;
-  remaining.forEach((p, i) => {
-    const a = (i / Math.max(1, remaining.length)) * Math.PI * 2 - Math.PI/2;
-    POS[p.id] = {
-      x: _clamp(cx + Math.cos(a) * outerR, 36, W-36),
-      y: _clamp(cy + Math.sin(a) * outerR, 36, H-36)
-    };
-    placed.add(p.id);
-  });
-
-  /* ─── 겹침 해소 — 충분히 반복 ─── */
-  for(let pass = 0; pass < 20; pass++) _resolveOverlaps(ppl);
+  /* 겹침 해소 — 40회 */
+  for(let pass=0; pass<40; pass++) _resolveOverlaps(ppl);
 }
 
 function _placeNewNode(p, ppl){
-  let bx = W * 0.85, by = 50;
+  let bx = W*0.8, by = 60;
   if(p.ref && POS[p.ref]){
     const parent = POS[p.ref];
-    const siblings = ppl.filter(q => q.ref===p.ref && POS[q.id] && q.id!==p.id);
-    const usedAngles = siblings.map(s => Math.atan2(POS[s.id].y-parent.y, POS[s.id].x-parent.x));
-    let bestA = 0, bestGap = 0;
-    for(let a = 0; a < Math.PI*2; a += 0.2){
-      const gap = usedAngles.reduce((mn,ua)=>Math.min(mn, Math.abs(ua-a)), Math.PI*2);
-      if(gap > bestGap){ bestGap=gap; bestA=a; }
+    const siblings = ppl.filter(q=>q.ref===p.ref && POS[q.id] && q.id!==p.id);
+    const usedAngles = siblings.map(s=>Math.atan2(POS[s.id].y-parent.y, POS[s.id].x-parent.x));
+    let bestA=0, bestGap=0;
+    for(let a=0; a<Math.PI*2; a+=0.15){
+      const gap = usedAngles.length
+        ? usedAngles.reduce((mn,ua)=>{ let d=Math.abs(ua-a); if(d>Math.PI)d=Math.PI*2-d; return Math.min(mn,d); }, Math.PI*2)
+        : Math.PI*2;
+      if(gap>bestGap){ bestGap=gap; bestA=a; }
     }
-    const parentNode = ppl.find(q=>q.id===p.ref) || p;
-    const dist = nodeR(parentNode) + nodeR(p) + 40;
-    bx = parent.x + Math.cos(bestA)*dist;
-    by = parent.y + Math.sin(bestA)*dist;
+    const pn = ppl.find(q=>q.id===p.ref)||p;
+    const dist = nodeR(pn)+nodeR(p)+55;
+    bx = _clamp(parent.x+Math.cos(bestA)*dist, 46, W-46);
+    by = _clamp(parent.y+Math.sin(bestA)*dist, 46, H-46);
   }
-  POS[p.id] = { x: _clamp(bx, 36, W-36), y: _clamp(by, 36, H-36) };
-  for(let i=0; i<10; i++) _resolveOverlaps(ppl);
+  POS[p.id]={x:bx, y:by};
+  for(let i=0; i<15; i++) _resolveOverlaps(ppl);
 }
 
 function _resolveOverlaps(ppl){
@@ -476,20 +492,18 @@ function _resolveOverlaps(ppl){
       const a=ppl[i], b=ppl[j];
       const pa=POS[a.id], pb=POS[b.id];
       if(!pa||!pb) continue;
-      /* 최소 거리 = 두 노드 반지름 합 + 여유 24px */
-      const minDist = nodeR(a) + nodeR(b) + 24;
+      const minDist = nodeR(a)+nodeR(b)+28;
       const dx=pb.x-pa.x, dy=pb.y-pa.y;
       const d=Math.sqrt(dx*dx+dy*dy)||0.1;
-      if(d < minDist){
-        const push = (minDist - d) / 2 + 1;
+      if(d<minDist){
+        const push=(minDist-d)/2+2;
         const nx=dx/d, ny=dy/d;
-        /* 허브는 더 안 밀리고, 리프 쪽을 많이 밀어냄 */
-        const wa = isHub(a.id) ? 0.15 : 0.5;
-        const wb = isHub(b.id) ? 0.15 : 0.5;
-        pa.x = _clamp(pa.x - nx*push*wa, 24, W-24);
-        pa.y = _clamp(pa.y - ny*push*wa, 24, H-24);
-        pb.x = _clamp(pb.x + nx*push*wb, 24, W-24);
-        pb.y = _clamp(pb.y + ny*push*wb, 24, H-24);
+        const wa=isHub(a.id)?0.1:0.5;
+        const wb=isHub(b.id)?0.1:0.5;
+        pa.x=_clamp(pa.x-nx*push*wa, 30, W-30);
+        pa.y=_clamp(pa.y-ny*push*wa, 30, H-30);
+        pb.x=_clamp(pb.x+nx*push*wb, 30, W-30);
+        pb.y=_clamp(pb.y+ny*push*wb, 30, H-30);
       }
     }
   }
@@ -1115,7 +1129,19 @@ function openDetail(id){
   `;
   openSheet('shDetail');
 }
-function markContact(id){const p=D.people.find(x=>x.id===id);p.lastContact=new Date().toISOString().slice(0,10);save();refresh();openDetail(id);toast('접촉일 오늘로 갱신','📞');}
+function markContact(id){
+  const p=D.people.find(x=>x.id===id);
+  if(!p) return;
+  const today=new Date().toISOString().slice(0,10);
+  p.lastContact=today;
+  /* contactLog에도 기록 — classifyPerson의 recentlyActed 판단에 사용 */
+  if(!p.contactLog) p.contactLog=[];
+  /* 오늘 이미 기록됐으면 중복 추가 안 함 */
+  if(!p.contactLog.some(l=>l.date===today)){
+    p.contactLog.push({ date:today, result:'contact' });
+  }
+  save(); refresh(); openDetail(id); toast('접촉일 오늘로 갱신','📞');
+}
 
 /* 연계1: 상세 시트 → 이 인물로 미팅 일정 바로 추가 */
 function openSchedFromDetail(personId){
@@ -1860,33 +1886,44 @@ function classifyPerson(p){
   const pl   = ensurePipeline(p);
   const pipelineDone = pl.dates.filter(Boolean).length;
 
-  /* ── 기회 발굴 조건 (우선 판단) ─────────────────────────────
-     1) 파이프라인 4단계(보험가입) 방금 완료 → 소개 요청 타이밍
-     2) 소개 이력 1건 이상 + 최근 14일 이내 연락 → 다시 소개 요청 가능
-     3) 관계온도 높고(60+) 소개예측 점수 높음(50+) → 지금이 적기
+  /* ── 최근 소개 요청 결과 기록 여부 확인 ──
+     contactLog에 최근 14일 이내 기록이 있으면
+     이미 액션을 취한 것 → 기회 발굴에서 제외 */
+  const log = p.contactLog || [];
+  const recentlyActed = log.some(l => {
+    const daysSince = ago(l.date);
+    return daysSince !== null && daysSince <= 14;
+  });
+
+  /* ── 기회 발굴 조건 ────────────────────────────────────────────
+     조건 충족하더라도, 최근 14일 내 연락+결과 기록한 사람은 제외
   ──────────────────────────────────────────────────────────── */
-  if(pipelineDone >= 4 && rs.score >= 40){
-    let reason = '';
-    if(pipelineDone === 4) reason = '보험가입 완료 — 소개 요청 드리기 좋은 시점이에요';
-    else if(pipelineDone === 5) reason = '지인소개까지 완료 — 추가 소개를 부탁해보세요';
-    else reason = '영업 진행이 잘 되고 있어요 — 소개 요청해보세요';
-    return { type:'opportunity', reason };
+  if(!recentlyActed){
+    /* 1) 파이프라인 4단계 이상 완료 + 소개 예측 점수 충분 */
+    if(pipelineDone >= 4 && rs.score >= 40){
+      let reason = '';
+      if(pipelineDone === 4) reason = '보험가입 완료 — 소개 요청 드리기 좋은 시점이에요';
+      else reason = '지인소개까지 완료 — 추가 소개를 부탁해보세요';
+      return { type:'opportunity', reason };
+    }
+
+    /* 2) 소개 이력 있음 + 최근 14일 이내 연락 + 온도 양호 */
+    if(rc(p.id) >= 1 && d !== null && d <= 14 && temp.total >= 50){
+      return { type:'opportunity', reason: '최근 소개 이력 있음 — 다시 한번 부탁드려보세요' };
+    }
+
+    /* 3) 관계온도 높고 소개 예측 점수 높음 */
+    if(temp.total >= 65 && rs.score >= 50){
+      return { type:'opportunity', reason: '관계가 좋을 때 소개 요청 드리면 성공률이 높아요' };
+    }
   }
 
-  if(rc(p.id) >= 1 && d !== null && d <= 14 && temp.total >= 50){
-    return { type:'opportunity', reason: `최근 소개 이력 있음 — 다시 한번 부탁드려보세요` };
-  }
-
-  if(temp.total >= 65 && rs.score >= 50){
-    return { type:'opportunity', reason: '관계가 좋을 때 소개 요청 드리면 성공률이 높아요' };
-  }
-
-  /* ── 관리 목적 조건 ─────────────────────────────────────────
-     1) 관계온도 낮음(40 미만) → 식어가는 관계 복구 필요
-     2) 오래 연락 안 함(기준일 초과) → 안부 연락 필요
-     3) 접촉 기록 없음 → 첫 연락 필요
+  /* ── 관리 목적 조건 ────────────────────────────────────────────
+     오늘 이미 연락한 사람(d===0)은 관리 목적에서도 제외
   ──────────────────────────────────────────────────────────── */
   const thr = getPersonThr(p);
+  if(d === 0) return null;  // 오늘 연락 완료 → 할 일 없음
+
   if(d === null){
     return { type:'manage', reason: '아직 한 번도 연락하지 않았어요 — 첫 연락을 드려보세요' };
   }
@@ -1897,7 +1934,7 @@ function classifyPerson(p){
     return { type:'manage', reason: `마지막 연락이 ${d}일 전이에요 — 안부 연락 드릴 시간이에요` };
   }
 
-  return null; // 오늘 챙길 필요 없음
+  return null;
 }
 
 /* 오늘 할 일 전체 렌더링 */
@@ -2050,8 +2087,8 @@ function renderTempSummary(){}
 const DEFAULT_THR = { customer:30, friend:15, prospect:7 };
 
 function getPersonThr(p){
-  /* 개인 설정이 있으면 우선, 없으면 유형별 기본값 */
-  return p.alertDays ?? DEFAULT_THR[p.rel] ?? alertThreshold;
+  /* 개인 설정 → 전역 기준일(알림설정) → 유형별 기본값 순으로 적용 */
+  return p.alertDays ?? alertThreshold ?? DEFAULT_THR[p.rel];
 }
 
 /* ═══ 내보내기 / 가져오기 ════════════════════════════════════════ */
