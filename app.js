@@ -1317,7 +1317,7 @@ function checkOnboard(){
 function closeOnboard(){
   document.getElementById('onboardOverlay').style.display='none';
   localStorage.setItem('lm_onboard_seen','1');
-  document.getElementById('btnAddPerson')?.click() || openForm();
+  openForm();
 }
 function startWithSample(){
   document.getElementById('onboardOverlay').style.display='none';
