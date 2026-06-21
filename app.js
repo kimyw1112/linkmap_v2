@@ -1586,6 +1586,14 @@ function renderDayScheds(dateStr) {
 /* ─── 일정 추가/수정 폼 ─── */
 document.getElementById('btnAddSched').addEventListener('click', () => openSchedForm(null));
 
+/* 일정 유형 토글 */
+let schedType = 'meeting'; // 기본값: 대면 미팅
+function setSchedType(type){
+  schedType = type;
+  document.getElementById('schedTypeMeeting').classList.toggle('on', type==='meeting');
+  document.getElementById('schedTypeOther').classList.toggle('on', type==='other');
+}
+
 function openSchedForm(editId) {
   schedEditId = editId;
   document.getElementById('schedTitle').textContent = editId ? '일정 수정' : '일정 추가';
@@ -1604,12 +1612,15 @@ function openSchedForm(editId) {
     document.getElementById('sTitle').value = s.title;
     sel.value = s.personId||'';
     document.getElementById('sMemo').value  = s.memo||'';
+    /* 수정 시 기존 유형 복원 (없으면 meeting 기본) */
+    setSchedType(s.isMeeting === false ? 'other' : 'meeting');
   } else {
     document.getElementById('sDate').value  = calSelDate;
     document.getElementById('sTime').value  = '';
     document.getElementById('sTitle').value = '';
     sel.value = '';
     document.getElementById('sMemo').value  = '';
+    setSchedType('meeting'); // 신규는 대면 미팅 기본
   }
   openSheet('shSched');
 }
@@ -1627,9 +1638,10 @@ document.getElementById('btnSchedSave').addEventListener('click', () => {
 
   const obj = {
     date, title,
-    time:     document.getElementById('sTime').value||'',
-    personId: document.getElementById('sPerson').value ? +document.getElementById('sPerson').value : null,
-    memo:     document.getElementById('sMemo').value.trim(),
+    time:      document.getElementById('sTime').value||'',
+    personId:  document.getElementById('sPerson').value ? +document.getElementById('sPerson').value : null,
+    memo:      document.getElementById('sMemo').value.trim(),
+    isMeeting: schedType === 'meeting',   // ← 대면 여부 저장
   };
 
   if (schedEditId) {
@@ -2066,7 +2078,7 @@ function classifyPerson(p){
   return null;
 }
 
-/* 오늘 할 일 — 오늘의 1인 추천 + 오늘 일정 */
+/* 오늘 할 일 — 비대면 연락 추천 + 대면 만남(일정) */
 function renderTodayFull(){
   const hdrEl = document.getElementById('todayDateHdr');
   if(hdrEl){
@@ -2074,7 +2086,7 @@ function renderTodayFull(){
     const DOW = ['일','월','화','수','목','금','토'];
     hdrEl.innerHTML = `
       <div class="today-date-main">${now.getMonth()+1}월 ${now.getDate()}일 (${DOW[now.getDay()]})</div>
-      <div class="today-date-sub">${D.people.length ? '오늘 연락할 분을 확인하세요' : '먼저 인맥을 추가해보세요'}</div>`;
+      <div class="today-date-sub">${D.people.length ? '오늘 연락·만남을 확인하세요' : '먼저 인맥을 추가해보세요'}</div>`;
   }
 
   const heroBox = document.getElementById('todayHero');
@@ -2091,21 +2103,62 @@ function renderTodayFull(){
     return;
   }
 
-  /* 오늘 연락 완료 제외 후 관계온도 낮은 순 1명 선택 */
+  const today = new Date().toISOString().slice(0,10);
+
+  /* ── 섹션 A: 대면 만남 — 오늘 isMeeting 일정 ── */
+  const meetingScheds = (SCHEDS||[])
+    .filter(s => s.date === today && s.isMeeting !== false)
+    .sort((a,b) => (a.time||'').localeCompare(b.time||''));
+
+  /* ── 섹션 B: 비대면 연락 — 관계온도 최하위 1인 추천 ── */
+  /* 오늘 이미 연락한 사람, 오늘 대면 일정 있는 사람 제외 */
+  const meetingPersonIds = new Set(meetingScheds.map(s=>s.personId).filter(Boolean));
   const pick = D.people
     .map(p => ({ p, t: calcRelationshipTemp(p) }))
-    .filter(({ p }) => ago(p.lastContact) !== 0)
+    .filter(({ p }) => ago(p.lastContact) !== 0 && !meetingPersonIds.has(p.id))
     .sort((a, b) => a.t.total - b.t.total)[0] || null;
 
-  /* 오늘 일정 */
-  const today = new Date().toISOString().slice(0,10);
-  const todayScheds = (SCHEDS||[])
-    .filter(s => s.date === today)
+  /* ── 기타 일정 (isMeeting===false) ── */
+  const otherScheds = (SCHEDS||[])
+    .filter(s => s.date === today && s.isMeeting === false)
     .sort((a,b) => (a.time||'').localeCompare(b.time||''));
 
   let html = '';
 
-  /* ── 오늘의 1인 추천 카드 ── */
+  /* ══ 섹션 A: 오늘 대면 만남 ══ */
+  html += `<div class="today-section-label meeting-label">
+    <span class="today-section-ic">🤝</span>오늘 대면 만남
+  </div>`;
+
+  if(meetingScheds.length){
+    meetingScheds.forEach(s => {
+      const person = s.personId ? D.people.find(p=>p.id===s.personId) : null;
+      const t = person ? calcRelationshipTemp(person) : null;
+      html += `<div class="today-meeting-card" onclick="document.querySelector('.nitem[data-v=cal]').click()">
+        <div class="today-meeting-time">${s.time||'시간 미정'}</div>
+        <div class="today-meeting-info">
+          <div class="today-meeting-title">${esc(s.title)}</div>
+          ${person ? `<div class="today-meeting-person">
+            <span style="color:${REL[person.rel].col};font-weight:700">${esc(person.name)}</span>
+            ${t ? `<span class="today-meeting-temp" style="color:${t.color}">${t.emoji.split('')[0]} ${t.total}°</span>` : ''}
+          </div>` : ''}
+          ${s.memo ? `<div class="today-meeting-memo">${esc(s.memo)}</div>` : ''}
+        </div>
+        <span class="today-meeting-arr">›</span>
+      </div>`;
+    });
+  } else {
+    html += `<div class="today-section-empty">
+      오늘 예정된 대면 미팅이 없어요
+      <button class="today-section-add-btn" onclick="openSchedForm(null)">+ 일정 추가</button>
+    </div>`;
+  }
+
+  /* ══ 섹션 B: 오늘 비대면 연락 ══ */
+  html += `<div class="today-section-label call-label">
+    <span class="today-section-ic">📞</span>오늘 비대면 연락
+  </div>`;
+
   if(pick){
     const { p, t } = pick;
     const col = REL[p.rel].col;
@@ -2139,31 +2192,28 @@ function renderTodayFull(){
       </button>
     </div>`;
   } else {
-    html += `<div class="tl-empty" style="padding:32px 24px 16px">
+    html += `<div class="tl-empty" style="padding:20px 24px 8px">
       <div class="tl-empty-ic">🎉</div>
-      <div class="tl-empty-msg">오늘 연락할 분이 없어요!</div>
+      <div class="tl-empty-msg">오늘 비대면 연락할 분이 없어요!</div>
     </div>`;
   }
 
-  /* ── 오늘 일정 ── */
-  if(todayScheds.length){
-    html += `<div class="tl-section">
-      <div class="tl-section-hdr sched">
-        <span class="tl-section-ic">📅</span>
-        <span class="tl-section-ttl">오늘 일정</span>
-      </div>`;
-    todayScheds.forEach(s=>{
+  /* ── 기타 일정 (있을 때만) ── */
+  if(otherScheds.length){
+    html += `<div class="today-section-label other-label">
+      <span class="today-section-ic">📋</span>기타 일정
+    </div>`;
+    otherScheds.forEach(s => {
       const person = s.personId ? D.people.find(p=>p.id===s.personId) : null;
       html += `<div class="tl-row" onclick="document.querySelector('.nitem[data-v=cal]').click()">
         <div class="tl-time">${s.time||'—'}</div>
         <div class="tl-info">
           <div class="tl-name">${esc(s.title)}</div>
-          ${person?`<div class="tl-reason">${esc(person.name)}님과의 일정</div>`:''}
+          ${person ? `<div class="tl-reason">${esc(person.name)}님 관련 일정</div>` : ''}
         </div>
         <span class="tl-arr">›</span>
       </div>`;
     });
-    html += `</div>`;
   }
 
   dashBox.innerHTML = html;

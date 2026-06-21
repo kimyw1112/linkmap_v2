@@ -452,6 +452,15 @@
     <div class="field"><label>날짜 *</label><input id="sDate" type="date"></div>
     <div class="field"><label>시간</label><input id="sTime" type="time" placeholder="예: 14:00"></div>
     <div class="field"><label>제목 *</label><input id="sTitle" type="text" placeholder="예: 이O수님 미팅"></div>
+    <!-- 대면 미팅 여부 -->
+    <div class="field sched-type-field">
+      <label>일정 유형</label>
+      <div class="sched-type-row">
+        <button type="button" class="sched-type-btn on" id="schedTypeMeeting" onclick="setSchedType('meeting')">🤝 대면 미팅</button>
+        <button type="button" class="sched-type-btn"    id="schedTypeOther"   onclick="setSchedType('other')">📋 기타 일정</button>
+      </div>
+      <div class="hint">대면 미팅은 오늘 할 일 탭에 별도 표시됩니다</div>
+    </div>
     <div class="field">
       <label>관련 인맥 (선택)</label>
       <select id="sPerson"><option value="">— 선택 안 함 —</option></select>

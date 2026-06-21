@@ -1687,3 +1687,68 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
   pointer-events: auto;
 }
 .guide-keep-btn:active { background: var(--border); }
+
+/* ═══ 오늘 할 일 — 2섹션 레이아웃 ══════════════════════════════ */
+.today-section-label {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 800; letter-spacing: .3px;
+  padding: 18px 16px 8px;
+}
+.today-section-ic { font-size: 16px; }
+
+.meeting-label { color: #047857; }
+.call-label    { color: #1558B0; }
+.other-label   { color: var(--txt2); }
+
+/* 대면 만남 카드 */
+.today-meeting-card {
+  margin: 0 14px 8px;
+  background: #fff;
+  border-radius: 14px;
+  border: 1.5px solid #D1FAE5;
+  padding: 14px 14px 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: transform .12s;
+  box-shadow: 0 2px 10px rgba(5,150,105,.08);
+}
+.today-meeting-card:active { transform: scale(.98); }
+
+.today-meeting-time {
+  font-size: 14px; font-weight: 800;
+  color: #047857; flex-shrink: 0; min-width: 52px;
+  font-family: var(--num);
+}
+.today-meeting-info { flex: 1; min-width: 0; }
+.today-meeting-title {
+  font-size: 15px; font-weight: 700; color: var(--txt);
+  margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.today-meeting-person {
+  font-size: 12px; color: var(--txt2);
+  display: flex; align-items: center; gap: 6px;
+}
+.today-meeting-temp {
+  font-size: 11px; font-weight: 700;
+}
+.today-meeting-memo {
+  font-size: 11px; color: var(--txt3); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.today-meeting-arr {
+  font-size: 18px; color: #059669; font-weight: 700; flex-shrink: 0;
+}
+
+/* 섹션 빈 상태 */
+.today-section-empty {
+  margin: 0 14px 8px;
+  padding: 14px 16px;
+  background: var(--bg2); border-radius: 12px;
+  font-size: 13px; color: var(--txt3);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.today-section-add-btn {
+  font-size: 12px; font-weight: 700; color: var(--brand);
+  background: none; border: 1px solid var(--brand);
+  border-radius: 8px; padding: 4px 10px; cursor: pointer;
+}
+.today-section-add-btn:active { background: var(--brand-pale); }
