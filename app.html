@@ -175,7 +175,14 @@
       <h2>인맥 목록</h2>
     </div>
     <div class="vbody">
-      <div class="srch"><input id="srchInput" type="text" placeholder="이름 또는 지역 검색"></div>
+      <div class="srch">
+        <input id="srchInput" type="text" placeholder="이름 또는 지역 검색">
+      </div>
+      <!-- 정렬 토글 -->
+      <div class="list-sort-row">
+        <button class="sort-btn on" data-s="referral" onclick="setListSort('referral')">소개 순</button>
+        <button class="sort-btn"    data-s="temp"     onclick="setListSort('temp')">🌡 관계 온도 순</button>
+      </div>
       <div id="plist"></div>
     </div>
   </div>
