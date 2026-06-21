@@ -2459,21 +2459,95 @@ function confirmClearPin(){
 }
 function loadSample(){
   if(D.people.length&&!confirm('샘플을 불러오면 현재 데이터를 덮어씁니다.'))return;
-  const t=Date.now(),dago=n=>new Date(t-n*86400000).toISOString().slice(0,10);
+  const t=Date.now(), dago=n=>new Date(t-n*86400000).toISOString().slice(0,10);
+
+  /* 파이프라인 헬퍼 — done: 완료 단계 수(0~4), 각 날짜는 역순으로 계산 */
+  const pipe = (done, baseDay=0) => ({
+    stage: done - 1,
+    dates: [
+      done>=1 ? dago(baseDay+done*30+60) : null,  // 고객등록
+      done>=2 ? dago(baseDay+done*20+30) : null,  // 보장분석
+      done>=3 ? dago(baseDay+done*10+15) : null,  // 가입설계
+      done>=4 ? dago(baseDay+5)          : null,  // 보험가입
+    ],
+    history: done > 0
+      ? Array.from({length: done}, (_,i) => ({
+          stage: i, date: dago(baseDay + (done-i)*20 + 10),
+          action: i===0?'고객등록':i===1?'보장분석':i===2?'가입설계':'보험가입'
+        }))
+      : [],
+  });
+
   D={nid:12,people:[
-    {id:1,name:'이정훈',rel:'customer',region:'성남시 분당구',ref:null,lastContact:dago(125),memo:'자영업, 자녀 2명'},
-    {id:2,name:'박서연',rel:'customer',region:'성남시 분당구',ref:1,lastContact:dago(18),memo:'이정훈 직장 동료'},
-    {id:3,name:'최민호',rel:'customer',region:'용인시 수지구',ref:1,lastContact:dago(98),memo:''},
-    {id:4,name:'헬스장 형',rel:'friend',region:'성남시 분당구',ref:null,lastContact:dago(8),memo:'운동 모임 지인'},
-    {id:5,name:'김지아',rel:'customer',region:'성남시 분당구',ref:2,lastContact:dago(4),memo:'박서연 대학 친구'},
-    {id:6,name:'정우성',rel:'prospect',region:'수원시 영통구',ref:2,lastContact:null,memo:'신규, 미팅 예정'},
-    {id:7,name:'한소희',rel:'customer',region:'용인시 수지구',ref:3,lastContact:dago(55),memo:''},
-    {id:8,name:'대학 후배',rel:'friend',region:'서울시 강남구',ref:4,lastContact:dago(25),memo:''},
-    {id:9,name:'윤도현',rel:'prospect',region:'성남시 분당구',ref:5,lastContact:null,memo:'김지아 지인'},
-    {id:10,name:'서지원',rel:'customer',region:'수원시 영통구',ref:7,lastContact:dago(155),memo:''},
-    {id:11,name:'이하윤',rel:'customer',region:'성남시 분당구',ref:2,lastContact:dago(30),memo:''},
+    /* ── 허브 고객 — 소개 2명, 보험가입 완료, 오래 연락 없음 ── */
+    {id:1, name:'이정훈', rel:'customer', region:'성남시 분당구',
+     ref:null, lastContact:dago(125), memo:'자영업, 자녀 2명',
+     pipeline: pipe(4, 90),  // 보험가입 완료
+     contactLog:[{date:dago(125),result:'contact'}]},
+
+    /* ── 이정훈 소개 — 보험가입 완료, 최근 연락 ── */
+    {id:2, name:'박서연', rel:'customer', region:'성남시 분당구',
+     ref:1, lastContact:dago(18), memo:'이정훈 직장 동료',
+     pipeline: pipe(4, 50),  // 보험가입 완료 → 소개 2명 해줌
+     contactLog:[{date:dago(18),result:'contact'},{date:dago(35),result:'success'}]},
+
+    /* ── 이정훈 소개 — 보험가입 완료, 연락 뜸함 ── */
+    {id:3, name:'최민호', rel:'customer', region:'용인시 수지구',
+     ref:1, lastContact:dago(98), memo:'',
+     pipeline: pipe(4, 70),  // 보험가입 완료
+     contactLog:[{date:dago(98),result:'contact'}]},
+
+    /* ── 지인 — 보장분석까지 완료, 가입설계 진행 중 ── */
+    {id:4, name:'헬스장 형', rel:'friend', region:'성남시 분당구',
+     ref:null, lastContact:dago(8), memo:'운동 모임 지인',
+     pipeline: pipe(2, 20),  // 보장분석까지, 가입설계 진행 중
+     contactLog:[{date:dago(8),result:'contact'},{date:dago(22),result:'contact'}]},
+
+    /* ── 박서연 소개 — 보험가입 완료, 최근 연락 양호 ── */
+    {id:5, name:'김지아', rel:'customer', region:'성남시 분당구',
+     ref:2, lastContact:dago(4), memo:'박서연 대학 친구',
+     pipeline: pipe(4, 30),  // 보험가입 완료
+     contactLog:[{date:dago(4),result:'contact'},{date:dago(20),result:'success'}]},
+
+    /* ── 박서연 소개 — 신규, 미팅 예정 → 고객등록 단계 ── */
+    {id:6, name:'정우성', rel:'prospect', region:'수원시 영통구',
+     ref:2, lastContact:null, memo:'신규, 첫 미팅 예정',
+     pipeline: pipe(0),  // 아직 시작 전
+     contactLog:[]},
+
+    /* ── 최민호 소개 — 보장분석 완료, 가입설계 단계 ── */
+    {id:7, name:'한소희', rel:'customer', region:'용인시 수지구',
+     ref:3, lastContact:dago(55), memo:'',
+     pipeline: pipe(3, 30),  // 가입설계까지 완료, 보험가입 대기
+     contactLog:[{date:dago(55),result:'contact'},{date:dago(70),result:'pending'}]},
+
+    /* ── 지인 소개 — 고객등록 완료, 보장분석 진행 중 ── */
+    {id:8, name:'대학 후배', rel:'friend', region:'서울시 강남구',
+     ref:4, lastContact:dago(25), memo:'',
+     pipeline: pipe(1, 15),  // 고객등록 완료
+     contactLog:[{date:dago(25),result:'contact'}]},
+
+    /* ── 김지아 소개 — 신규, 연락 없음 → 고객등록 전 ── */
+    {id:9, name:'윤도현', rel:'prospect', region:'성남시 분당구',
+     ref:5, lastContact:null, memo:'김지아 지인, 연락 예정',
+     pipeline: pipe(0),
+     contactLog:[]},
+
+    /* ── 한소희 소개 — 보험가입 완료, 오래 연락 없음 ── */
+    {id:10, name:'서지원', rel:'customer', region:'수원시 영통구',
+     ref:7, lastContact:dago(155), memo:'',
+     pipeline: pipe(4, 120),  // 보험가입 완료
+     contactLog:[{date:dago(155),result:'contact'}]},
+
+    /* ── 박서연 소개 — 보험가입 완료, 한달 전 연락 ── */
+    {id:11, name:'이하윤', rel:'customer', region:'성남시 분당구',
+     ref:2, lastContact:dago(30), memo:'',
+     pipeline: pipe(4, 20),  // 보험가입 완료
+     contactLog:[{date:dago(30),result:'contact'}]},
   ]};
-  Object.keys(POS).forEach(k=>delete POS[k]); save(); refresh(); toast('샘플 로드 완료','✨');
+
+  Object.keys(POS).forEach(k=>delete POS[k]);
+  save(); refresh(); toast('샘플 로드 완료','✨');
 }
 
 /* ═══ 비밀번호 잠금 ══════════════════════════════════════════════
