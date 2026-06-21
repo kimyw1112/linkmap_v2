@@ -1585,44 +1585,60 @@ function closeView(){
 }
 
 /* ═══ 관계 온도 지수 (Relationship Health Score) ════════════════
-   최대 100점 = 접촉 신선도(50) + 소개 기여도(30) + 파이프라인 활력(20)
-════════════════════════════════════════════════════════════════ */
+   최대 100점 = 접촉 신선도(50) + 소개 기여도(30) + 파이프라인(20)
+
+   ┌─ 1. 접촉 신선도 (0~50점) ─ 마지막 연락이 얼마나 최근인가
+   │   • 오늘 연락           → 50점
+   │   • 기준일의 절반 이내   → 50→30점 선형 감소
+   │   • 기준일 이내         → 30→10점 선형 감소
+   │   • 기준일 초과         → 10→0점 (기준일의 2배에서 0)
+   │   • 연락 기록 없음       → 0점
+   │
+   ├─ 2. 소개 기여도 (0~30점) ─ 소개를 몇 명 해줬는가
+   │   • 1명당 10점, 최대 3명(30점)
+   │
+   └─ 3. 파이프라인 (0~20점) ─ 영업 단계가 얼마나 진행됐나
+       • 완료 단계 1개당 5점, 4단계 완료 시 20점 만점
+═══════════════════════════════════════════════════════════════ */
 function calcRelationshipTemp(p){
   let freshScore=0, referScore=0, pipeScore=0;
 
-  /* 1) 접촉 신선도 (최대 50점) */
+  /* ── 1) 접촉 신선도 (0~50점) ── */
   const d=ago(p.lastContact);
   const thr=getPersonThr(p);
   if(d===null){
-    freshScore=0;
-  } else if(d<=0){           // 오늘 또는 미래(UTC 오차 등) → 50점 상한
-    freshScore=50;
+    freshScore=0;                       // 연락 기록 없음
+  } else if(d<=0){
+    freshScore=50;                      // 오늘(또는 UTC 오차로 음수) → 만점
   } else if(d<=thr*0.5){
-    freshScore=Math.min(50, Math.round(50*(1-d/(thr*0.5))*0.3+35));  // 35~50, 상한 clamp
+    /* 0일~기준절반: 50점 → 30점 선형 */
+    const ratio=d/(thr*0.5);            // 0~1
+    freshScore=Math.round(50-ratio*20); // 50→30
   } else if(d<=thr){
-    freshScore=Math.round(35*(1-(d-thr*0.5)/(thr*0.5))); // 0~35
+    /* 기준절반~기준일: 30점 → 10점 선형 */
+    const ratio=(d-thr*0.5)/(thr*0.5);  // 0~1
+    freshScore=Math.round(30-ratio*20); // 30→10
+  } else if(d<=thr*2){
+    /* 기준일~기준2배: 10점 → 0점 선형 */
+    const ratio=(d-thr)/thr;            // 0~1
+    freshScore=Math.round(10-ratio*10); // 10→0
   } else {
-    freshScore=0;
+    freshScore=0;                       // 기준일 2배 초과
   }
+  freshScore=Math.max(0, Math.min(50, freshScore));  // 0~50 clamp
 
-  /* 2) 소개 기여도 (최대 30점) */
+  /* ── 2) 소개 기여도 (0~30점) ── 소개 1명당 10점, 최대 3명 ── */
   const rcN=rc(p.id);
   referScore=Math.min(30, rcN*10);
 
-  /* 3) 파이프라인 활력 (최대 20점) */
+  /* ── 3) 파이프라인 (0~20점) ── 완료 단계 1개당 5점 ── */
   if(p.pipeline){
     const pl=ensurePipeline(p);
-    const done=pl.dates.filter(Boolean).length;
-    const hist=pl.history||[];
-    /* 최근 90일 내 활동이 있으면 활력 인정 */
-    const recentActivity=hist.filter(h=>{
-      if(!h.date) return false;
-      return ago(h.date)<=90;
-    }).length;
-    pipeScore=Math.min(20, done*3 + recentActivity*2);
+    const done=pl.dates.filter(Boolean).length;  // 0~4
+    pipeScore=Math.min(20, done*5);              // 단계당 5점, 4단계=20점
   }
 
-  const total=freshScore+referScore+pipeScore;
+  const total=Math.min(100, freshScore+referScore+pipeScore);
   let emoji='',label='',color='';
   if(total>=80){    emoji='🔥🔥🔥'; label='매우 좋음'; color='#E85A00'; }
   else if(total>=60){emoji='🔥🔥';  label='좋음';     color='#D97706'; }
@@ -1640,9 +1656,9 @@ function renderTempHTML(t){
       <div class="temp-info">
         <div class="temp-label">관계 온도 <span style="color:${t.color};font-weight:700">${t.label}</span></div>
         <div class="temp-score-row">
-          <span title="접촉 신선도">접촉 ${t.freshScore}/50</span>
-          <span title="소개 기여도">소개 ${t.referScore}/30</span>
-          <span title="파이프라인 활력">활동 ${t.pipeScore}/20</span>
+          <span title="마지막 연락이 최근일수록 높음">접촉 ${t.freshScore}/50</span>
+          <span title="소개 1명당 10점">소개 ${t.referScore}/30</span>
+          <span title="파이프라인 단계당 5점">단계 ${t.pipeScore}/20</span>
         </div>
       </div>
       <div class="temp-total" style="color:${t.color}">${t.total}</div>
