@@ -890,14 +890,12 @@ function openDetail(id){
 
   /* ── 연계2: 오늘할일 이유 배지 ── */
   let todayBadgeHTML = '';
-  if(p.rel !== 'prospect' || true){
-    const cls = classifyPerson(p);
-    if(cls){
-      const isOpp = cls.type === 'opportunity';
-      todayBadgeHTML = `<div class="det-today-badge ${isOpp?'opp':'mgmt'}">
-        ${isOpp ? '🌟 소개 요청 적기' : '📞 안부 연락 필요'} &nbsp;·&nbsp; ${esc(cls.reason)}
-      </div>`;
-    }
+  const _cls = classifyPerson(p);
+  if(_cls){
+    const isOpp = _cls.type === 'opportunity';
+    todayBadgeHTML = `<div class="det-today-badge ${isOpp?'opp':'mgmt'}">
+      ${isOpp ? '🌟 소개 요청 적기' : '📞 안부 연락 필요'} &nbsp;·&nbsp; ${esc(_cls.reason)}
+    </div>`;
   }
 
   /* ── 관계 온도 계산 ── */
@@ -1002,7 +1000,7 @@ function recordContactResult(personId, resultKey){
   p.lastContact=new Date().toISOString().slice(0,10);
   save(); refresh(); openDetail(personId);
   const r=CONTACT_RESULTS.find(x=>x.key===resultKey);
-  toast('소개 요청 결과 기록: '+r.label, '📝');
+  if(r) toast('소개 요청 결과 기록: '+r.label, '📝');
 }
 
 function renderContactResultHTML(p){
@@ -1055,18 +1053,6 @@ function renderContactResultHTML(p){
   </div>`;
 }
 
-
-function copyScript(id){
-  const p=D.people.find(x=>x.id===id); if(!p) return;
-  const text=SCRIPTS[p.rel]||SCRIPTS.customer;
-  if(navigator.clipboard&&window.isSecureContext){
-    navigator.clipboard.writeText(text)
-      .then(()=>toast('스크립트가 복사됐습니다','📋'))
-      .catch(()=>_fallbackCopy(text));
-  } else {
-    _fallbackCopy(text);
-  }
-}
 function copyPipelineScript(id){
   const p=D.people.find(x=>x.id===id); if(!p) return;
   const pl=ensurePipeline(p);
@@ -1091,6 +1077,7 @@ function _fallbackCopy(text){
 }
 function delPerson(id){
   const p=D.people.find(x=>x.id===id);
+  if(!p) return;
   if(!confirm(`${p.name}님을 삭제할까요?`)) return;
   /* 소개 관계 해제 */
   D.people.filter(x=>x.ref===id).forEach(x=>x.ref=null);
@@ -1269,7 +1256,6 @@ document.getElementById('afCustomInput').addEventListener('keydown', e=>{
 /* ─── 알림 기준일 설정 ─── */
 let alertThreshold = 10;  // 기본 10일
 
-const schedKey = () => `lm_sched_${user.emp}`;
 let SCHEDS = [];   // [{ id, date:'YYYY-MM-DD', time:'HH:MM'|'', title, personId|null, memo }]
 
 /* saveScheds / loadScheds 는 상단 레이어2 암호화 섹션에 정의됨 */
@@ -1484,6 +1470,7 @@ function editSched(id)   { openSchedForm(id); }
 /* 오늘 할 일 탭에서 일정 추가 — 오늘 날짜 고정 + 대면 미팅 기본 */
 function openSchedFormToday(){
   calSelDate = new Date().toISOString().slice(0,10); // 오늘 날짜로 고정
+  schedType = 'meeting';                             // 대면 미팅 강제 설정
   openSchedForm(null);
 }
 function deleteSched(id) {
@@ -1611,16 +1598,6 @@ function renderTempHTML(t){
   </div>`;
 }
 
-/* ═══ 소개 성공률 계산 ══════════════════════════════════════════
-   정의: 기존 고객(customer) 중 소개를 1명 이상 받은 비율
-   = (rc(id)>=1 인 customer 수) / (전체 customer 수) × 100
-═══════════════════════════════════════════════════════════════ */
-function calcSuccessRate(){
-  const customers=D.people.filter(p=>p.rel==='customer');
-  if(!customers.length) return null;
-  const withRef=customers.filter(p=>rc(p.id)>=1).length;
-  return Math.round(withRef/customers.length*100);
-}
 
 /* ─── 첫 실행 온보딩 ─── */
 /* ═══ 온보딩 튜토리얼 ══════════════════════════════════════════ */
@@ -1812,42 +1789,9 @@ function calcReferralScore(p){
   return { score, level, color, emoji, msg, details };
 }
 
-/* 오늘 연락 1순위를 선정하는 함수 */
-function pickTodayHero(){
-  /* 기존 고객 + 지인 중 소개 예측 점수 상위 1명 */
-  const candidates = D.people
-    .filter(p => p.rel==='customer' || p.rel==='friend')
-    .map(p => ({ p, rs: calcReferralScore(p), temp: calcRelationshipTemp(p) }))
-    .filter(x => x.rs.score >= 20)   /* 너무 낮으면 제외 */
-    .sort((a,b) => b.rs.score - a.rs.score);
-
-  return candidates[0] || null;
-}
 
 /* ─── 오늘 할 일 풀뷰 렌더링 (전면 재작성) ─── */
-function renderTodayFull(){
-  /* 날짜 헤더 */
-  const hdrEl = document.getElementById('todayDateHdr');
-  if(hdrEl){
-    const now = new Date();
-    const DOW = ['일','월','화','수','목','금','토'];
-    hdrEl.innerHTML = `
-      <div class="today-date-main">${now.getMonth()+1}월 ${now.getDate()}일 (${DOW[now.getDay()]})</div>
-      <div class="today-date-sub">${D.people.length ? '오늘 챙길 분을 확인하세요' : '먼저 인맥을 추가해보세요'}</div>`;
-  }
-
-  renderTodayHero();
-  renderTodayList();
-}
-
-/* ═══ 오늘 할 일 — 관리 목적 / 기회 발굴 2섹션 ════════════════
-
-   관리 목적  : 관계온도가 낮거나 오래 연락 못 한 사람 → 먼저 챙겨야 할 분
-   기회 발굴  : 파이프라인 완료 직후, 소개 이력 있음, 최근 접촉 후 온도 높음
-               → 소개 요청하기 좋은 타이밍인 분
-
-   공통 원칙  : 숫자(% · 점수)는 보여주지 않음, 이유만 한 줄로 표시
-════════════════════════════════════════════════════════════════ */
+/* 오늘 할 일 — 비대면 연락 추천 + 대면 만남(일정) */
 
 /* 사람별 오늘의 역할 분류 */
 function classifyPerson(p){
@@ -2046,18 +1990,13 @@ function renderTodayFull(){
   dashBox.innerHTML = html;
 }
 
-/* renderTodayHero는 renderTodayFull로 통합됨 */
-function renderTodayHero(){}
 
-/* 나머지 할 일 목록 */
-function renderTodayList(){}
 
 function renderTodayDash(){
   const activeTab = document.querySelector('.nitem.on');
   if(activeTab && activeTab.dataset.v==='today') renderTodayFull();
 }
 
-function renderTempSummary(){}
 
 /* ─── 고객 유형별 기본 알림 주기 ─── */
 const DEFAULT_THR = { customer:30, friend:15, prospect:7 };
@@ -2221,6 +2160,7 @@ document.getElementById('btnExportPdf').addEventListener('click',()=>{
 </body></html>`;
 
   const w = window.open('','_blank','width=900,height=650');
+  if(!w){ toast('팝업이 차단됐습니다. 브라우저 주소창 옆 팝업 허용 버튼을 눌러주세요','⚠'); return; }
   w.document.write(html);
   w.document.close();
   setTimeout(()=>{ w.print(); }, 600);
@@ -2520,8 +2460,8 @@ async function sendPushNotification(title, body, tag='linkmap'){
 async function checkAndNotify(){
   if(Notification.permission!=='granted') return;
   if(!localStorage.getItem(PUSH_KEY)) return;
-  const urgent=buildAlerts().filter(i=>i.lvl>=2);
-  const warn  =buildAlerts().filter(i=>i.lvl===1);
+  const urgent=buildAlerts(alertThreshold).filter(i=>i.lvl>=2);
+  const warn  =buildAlerts(alertThreshold).filter(i=>i.lvl===1);
   if(urgent.length){
     const names=urgent.slice(0,3).map(i=>i.p.name).join(', ');
     await sendPushNotification(
