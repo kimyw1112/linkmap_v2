@@ -1052,18 +1052,8 @@ function openDetail(id){
   const col=REL[p.rel].col, rcN=rc(id), hub=isHub(id);
   const refP=p.ref?D.people.find(x=>x.id===p.ref):null;
   const kids=D.people.filter(x=>x.ref===id);
-  let lastTxt='없음', dayTxt='', contactTypeIc='';
-  if(p.lastContact){
-    const d=ago(p.lastContact);
-    lastTxt=p.lastContact;
-    dayTxt=d===0?'(오늘)':`(${d}일 전)`;
-    /* 가장 최근 contactLog에서 type 읽기 */
-    const lastLog=(p.contactLog||[]).slice().reverse()
-      .find(l=>l.date===p.lastContact);
-    if(lastLog?.type==='meeting')      contactTypeIc='🤝 대면';
-    else if(lastLog?.type==='call')    contactTypeIc='📞 비대면';
-    else                               contactTypeIc='📋';
-  }
+  let lastTxt='없음',dayTxt='';
+  if(p.lastContact){const d=ago(p.lastContact);lastTxt=p.lastContact;dayTxt=d===0?'(오늘)':`(${d}일 전)`;}
   // 소개 경로
   let chain=[p],cur=p;
   for(let i=0;i<5;i++){const nx=cur.ref?D.people.find(x=>x.id===cur.ref):null;if(!nx)break;chain.push(nx);cur=nx;}
@@ -1128,7 +1118,7 @@ function openDetail(id){
       <div class="kv"><span class="k">소개해 준 사람</span><span class="v">${refP?esc(refP.name):'직접 알게 됨'}</span></div>
       <div class="kv"><span class="k">소개 경로</span><span class="v" style="max-width:64%;text-align:right">${pathHTML}</span></div>
       <div class="kv"><span class="k">소개받은 인맥</span><span class="v">${kids.length?kids.map(x=>esc(x.name)).join(', '):'없음'}</span></div>
-      <div class="kv"><span class="k">최근 접촉</span><span class="v">${contactTypeIc ? `<span class="contact-type-ic">${contactTypeIc}</span> ` : ''}${esc(lastTxt)} <span style="color:var(--txt3)">${esc(dayTxt)}</span></span></div>
+      <div class="kv"><span class="k">최근 접촉</span><span class="v">${esc(lastTxt)} <span style="color:var(--txt3)">${esc(dayTxt)}</span></span></div>
       ${p.memo?`<div class="kv"><span class="k">메모</span><span class="v" style="max-width:60%">${esc(p.memo)}</span></div>`:''}
     </div>
     <div class="script-box">
@@ -1140,10 +1130,7 @@ function openDetail(id){
     ${renderPipelineHTML(p)}
     ${renderContactResultHTML(p)}
     ${referralStatusHTML}
-    <div class="contact-btn-row">
-      <button class="btn contact-btn-meeting" onclick="markContact(${id},'meeting')">🤝 대면 미팅</button>
-      <button class="btn contact-btn-call"    onclick="markContact(${id},'call')">📞 비대면 연락</button>
-    </div>
+    <button class="btn btn-primary" onclick="markContact(${id})">📞 오늘 접촉함 · 타이밍 갱신</button>
     <button class="btn btn-ghost"   onclick="openSchedFromDetail(${id})">📅 이 분과 미팅 일정 추가</button>
     <button class="btn btn-ghost"   onclick="addReferred(${id})">🔗 이 사람이 소개한 인맥 추가</button>
     <button class="btn btn-ghost"   onclick="openForm(${id})">✏ 수정</button>
@@ -1152,19 +1139,18 @@ function openDetail(id){
   `;
   openSheet('shDetail');
 }
-function markContact(id, type){
+function markContact(id){
   const p=D.people.find(x=>x.id===id);
   if(!p) return;
   const today=new Date().toISOString().slice(0,10);
   p.lastContact=today;
+  /* contactLog에도 기록 — classifyPerson의 recentlyActed 판단에 사용 */
   if(!p.contactLog) p.contactLog=[];
-  /* 오늘 같은 type 중복 추가 안 함 */
-  if(!p.contactLog.some(l=>l.date===today && l.result===(type||'contact'))){
-    p.contactLog.push({ date:today, result: type||'contact', type: type||null });
+  /* 오늘 이미 기록됐으면 중복 추가 안 함 */
+  if(!p.contactLog.some(l=>l.date===today)){
+    p.contactLog.push({ date:today, result:'contact' });
   }
-  const ic   = type==='meeting' ? '🤝' : '📞';
-  const label= type==='meeting' ? '대면 미팅 기록 완료' : '비대면 연락 기록 완료';
-  save(); refresh(); openDetail(id); toast(label, ic);
+  save(); refresh(); openDetail(id); toast('접촉일 오늘로 갱신','📞');
 }
 
 /* 연계1: 상세 시트 → 이 인물로 미팅 일정 바로 추가 */
@@ -1409,7 +1395,7 @@ function renderAlerts(){
         </div>
         <div class="ad">${it.reason}</div>
         <div class="abtn-row">
-          <button class="abtn pri" onclick="openDetail(${it.p.id})">접촉 기록하기 ›</button>
+          <button class="abtn pri" onclick="markContact(${it.p.id})">오늘 접촉함</button>
           <button class="abtn sec" onclick="openDetail(${it.p.id})">상세 보기</button>
         </div>
       </div>`;
@@ -2148,14 +2134,9 @@ function renderTodayFull(){
       <div class="today-pick-bar-wrap">
         <div class="today-pick-bar-fill" style="width:${t.total}%;background:${t.color}"></div>
       </div>
-      <div class="today-pick-contact-row">
-        <button class="today-pick-btn-half meeting" onclick="event.stopPropagation();markContact(${p.id},'meeting');renderTodayFull()">
-          🤝 대면 미팅
-        </button>
-        <button class="today-pick-btn-half call" onclick="event.stopPropagation();markContact(${p.id},'call');renderTodayFull()">
-          📞 비대면 연락
-        </button>
-      </div>
+      <button class="today-pick-btn" onclick="event.stopPropagation();markContact(${p.id});renderTodayFull()">
+        📞 오늘 연락했어요
+      </button>
     </div>`;
   } else {
     html += `<div class="tl-empty" style="padding:32px 24px 16px">
