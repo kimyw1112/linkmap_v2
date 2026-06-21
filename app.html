@@ -449,23 +449,39 @@
     <button class="icon-btn" onclick="closeSheet()">✕</button>
   </div>
   <div class="sheet-body">
-    <div class="field"><label>날짜 *</label><input id="sDate" type="date"></div>
-    <div class="field"><label>시간</label><input id="sTime" type="time" placeholder="예: 14:00"></div>
-    <div class="field"><label>제목 *</label><input id="sTitle" type="text" placeholder="예: 이O수님 미팅"></div>
-    <!-- 대면 미팅 여부 -->
-    <div class="field sched-type-field">
-      <label>일정 유형</label>
-      <div class="sched-type-row">
-        <button type="button" class="sched-type-btn on" id="schedTypeMeeting" onclick="setSchedType('meeting')">🤝 대면 미팅</button>
-        <button type="button" class="sched-type-btn"    id="schedTypeOther"   onclick="setSchedType('other')">📋 기타 일정</button>
-      </div>
-      <div class="hint">대면 미팅은 오늘 할 일 탭에 별도 표시됩니다</div>
+    <!-- 날짜·시간 -->
+    <div class="sched-row2">
+      <div class="field sched-half"><label>날짜 *</label><input id="sDate" type="date"></div>
+      <div class="field sched-half"><label>시간</label><input id="sTime" type="time"></div>
     </div>
+
+    <!-- 미팅 대상 -->
     <div class="field">
-      <label>관련 인맥 (선택)</label>
-      <select id="sPerson"><option value="">— 선택 안 함 —</option></select>
+      <label>미팅 대상 *</label>
+      <select id="sPerson" onchange="onSchedPersonChange()">
+        <option value="">— 인맥에서 선택 —</option>
+      </select>
     </div>
-    <div class="field"><label>메모</label><textarea id="sMemo" placeholder="장소, 안건 등 메모"></textarea></div>
+
+    <!-- 미팅 목적 (파이프라인 단계) -->
+    <div class="field">
+      <label>미팅 목적 *</label>
+      <div class="sched-purpose-row" id="schedPurposeRow">
+        <button type="button" class="sched-purpose-btn" data-stage="0" onclick="setSchedPurpose(0)">👤 고객등록</button>
+        <button type="button" class="sched-purpose-btn" data-stage="1" onclick="setSchedPurpose(1)">🔍 보장분석</button>
+        <button type="button" class="sched-purpose-btn" data-stage="2" onclick="setSchedPurpose(2)">📋 가입설계</button>
+        <button type="button" class="sched-purpose-btn" data-stage="3" onclick="setSchedPurpose(3)">✅ 보험가입</button>
+      </div>
+      <div class="hint" id="schedPurposeHint">미팅 목적을 선택하세요</div>
+    </div>
+
+    <!-- 장소 (메모) -->
+    <div class="field">
+      <label>장소 <span style="font-weight:400;color:var(--txt3)">(선택)</span></label>
+      <input id="sMemo" type="text" placeholder="예: 중화역 스타벅스, 회사 회의실">
+    </div>
+
+    <!-- 유형 (hidden — 항상 대면 미팅) -->
     <div class="hint-warn">⚠ 주민번호·연락처·계약금액 등 민감정보는 입력하지 마세요</div>
     <button class="btn btn-primary" id="btnSchedSave">저장하기</button>
   </div>

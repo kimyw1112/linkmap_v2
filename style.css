@@ -1591,3 +1591,74 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
   border-radius: 8px; padding: 4px 10px; cursor: pointer;
 }
 .today-section-add-btn:active { background: var(--brand-pale); }
+
+/* ═══ 일정 폼 개편 ════════════════════════════════════════════════ */
+.sched-row2 { display:flex; gap:10px; }
+.sched-half { flex:1; }
+
+.sched-purpose-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px;
+}
+.sched-purpose-btn {
+  padding: 10px 6px; border-radius: 10px; border: 1.5px solid var(--border);
+  background: var(--bg2); color: var(--txt2); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all .15s; text-align: center;
+}
+.sched-purpose-btn.on {
+  background: var(--brand); color: #fff; border-color: var(--brand);
+}
+.sched-purpose-btn:active { opacity:.82; }
+
+/* 일정 탭 카드 목적 태그 */
+.sched-purpose-tag {
+  display: inline-block; font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 6px; margin: 3px 0 4px;
+}
+
+/* ═══ 오늘 할일 대면 만남 카드 개편 ══════════════════════════════ */
+.today-meeting-card {
+  margin: 0 14px 10px;
+  background: #fff;
+  border-radius: 16px;
+  border: 1.5px solid #D1FAE5;
+  padding: 14px 14px;
+  cursor: pointer; transition: transform .12s;
+  box-shadow: 0 2px 12px rgba(5,150,105,.08);
+}
+.today-meeting-card:active { transform: scale(.98); }
+
+.today-meeting-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.today-meeting-time-badge {
+  font-size: 13px; font-weight: 800; color: #047857;
+  background: #D1FAE5; padding: 3px 10px; border-radius: 8px;
+  font-family: var(--num);
+}
+.today-meeting-purpose-badge {
+  font-size: 12px; font-weight: 700;
+  padding: 3px 10px; border-radius: 8px;
+}
+
+.today-meeting-body {
+  display: flex; align-items: center; gap: 12px;
+}
+.today-meeting-av {
+  width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 800; color: #fff;
+}
+.today-meeting-info { flex: 1; min-width: 0; }
+.today-meeting-name {
+  font-size: 16px; font-weight: 800; color: var(--txt);
+  margin-bottom: 3px;
+}
+.today-meeting-place {
+  font-size: 12px; color: var(--txt2); margin-top: 2px;
+}
+.today-meeting-temp-row {
+  font-size: 12px; margin-top: 3px;
+}
+.today-meeting-arr {
+  font-size: 20px; color: #059669; font-weight: 700; flex-shrink: 0;
+}
