@@ -1236,3 +1236,40 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
   font-size: 16px; color: var(--txt2);
   line-height: 1.9; margin-bottom: 24px;
 }
+
+/* ═══ 오늘 할 일 — 2섹션 (관리/기회) ══════════════════════════ */
+
+/* 섹션 헤더 */
+.tl-section-hdr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 13px 16px 10px;
+  border-bottom: 1px solid var(--border2);
+}
+.tl-section-ic  { font-size: 18px; flex-shrink: 0; }
+.tl-section-ttl { font-size: 14px; font-weight: 800; }
+
+/* 기회 발굴 — 초록 계열 */
+.tl-section-hdr.opp  { background: #F0FDF4; }
+.tl-section-hdr.opp .tl-section-ttl { color: #15803D; }
+
+/* 관리 목적 — 주황 계열 */
+.tl-section-hdr.mgmt { background: #FFF7ED; }
+.tl-section-hdr.mgmt .tl-section-ttl { color: var(--brand2); }
+
+/* 일정 — 파랑 계열 */
+.tl-section-hdr.sched { background: #EFF6FF; }
+.tl-section-hdr.sched .tl-section-ttl { color: #1A6FD4; }
+
+/* 이유 한 줄 */
+.tl-reason {
+  font-size: 12px; color: var(--txt3);
+  margin-top: 3px; line-height: 1.5;
+}
+.tl-reason.opp  { color: #15803D; }
+.tl-reason.mgmt { color: var(--brand2); }
+
+/* 연락완료 버튼 색상 분기 */
+.tl-done.opp  { background: #ECFDF5; color: #15803D; border-color: rgba(21,128,61,.2); }
+.tl-done.opp:active  { background: #15803D; color: #fff; }
+.tl-done.mgmt { background: var(--brand-pale); color: var(--brand); border-color: rgba(232,90,0,.2); }
+.tl-done.mgmt:active { background: var(--brand); color: #fff; }

@@ -379,92 +379,95 @@ function initPos(){
 function _doFullLayout(ppl){
   const cx = W/2, cy = H/2;
 
-  /* ① 소개 횟수 기준 정렬 */
   const sorted = [...ppl].sort((a,b) => rc(b.id) - rc(a.id));
+  const hubs      = sorted.filter(p => rc(p.id) >= 2);
+  const placed    = new Set();
 
-  /* ② 허브 (소개 2명 이상) */
-  const hubs  = sorted.filter(p => rc(p.id) >= 2);
-  const roots = sorted.filter(p => !p.ref && rc(p.id) < 2);  // 독립 루트
-  const leaves = sorted.filter(p => p.ref && rc(p.id) < 2);   // 자식 리프
-
-  const placed = new Set();
-
-  /* ③ 허브를 중심 근처에 배치 */
-  const hubR = Math.min(80, W * 0.12);  // 허브끼리 거리 반경
+  /* ─── 허브 배치 ─── */
+  /* 허브가 1개면 중심, 2개 이상이면 중심 기준 충분히 벌려서 배치 */
+  const hubGap = Math.max(130, W * 0.22);
   hubs.forEach((p, i) => {
     let x, y;
     if(hubs.length === 1){
       x = cx; y = cy;
     } else {
       const a = (i / hubs.length) * Math.PI * 2 - Math.PI/2;
-      x = cx + Math.cos(a) * hubR;
-      y = cy + Math.sin(a) * hubR;
+      x = cx + Math.cos(a) * hubGap;
+      y = cy + Math.sin(a) * hubGap;
     }
     POS[p.id] = { x, y };
     placed.add(p.id);
   });
 
-  /* ④ 각 허브 주변에 자식 배치 */
+  /* ─── 허브 자식 배치 ─── */
   hubs.forEach(hub => {
     const children = ppl.filter(p => p.ref === hub.id && !placed.has(p.id));
-    const rHub  = nodeR(hub);
-    const childSpacing = 70;   // 자식끼리 간격
-    const orbitR = rHub + childSpacing;
+    if(!children.length) return;
+    const rHub   = nodeR(hub);
+    /* 자식 간격: 자식 노드 지름 + 여유 30px */
+    const childDiam   = nodeR(children[0]) * 2 + 30;
+    const circumNeeded = childDiam * children.length;
+    /* 원 반경 = 둘레가 자식들 간격을 충분히 수용하는 크기 */
+    const orbitR = Math.max(rHub + 75, circumNeeded / (2 * Math.PI));
+    /* 부모와 연결되지 않는 방향(위쪽)부터 시작 */
     children.forEach((child, i) => {
-      const a = (i / Math.max(1, children.length)) * Math.PI * 2 - Math.PI/2;
+      const a = (i / children.length) * Math.PI * 2 - Math.PI/2;
       const nx = POS[hub.id].x + Math.cos(a) * orbitR;
       const ny = POS[hub.id].y + Math.sin(a) * orbitR;
-      POS[child.id] = { x: _clamp(nx, 30, W-30), y: _clamp(ny, 30, H-30) };
+      POS[child.id] = { x: _clamp(nx, 36, W-36), y: _clamp(ny, 36, H-36) };
       placed.add(child.id);
 
       /* 손자 배치 */
       const grandChildren = ppl.filter(p => p.ref === child.id && !placed.has(p.id));
-      const gcR = nodeR(child) + 55;
+      if(!grandChildren.length) return;
+      const gcDiam  = nodeR(grandChildren[0]) * 2 + 24;
+      const gcOrbit = Math.max(nodeR(child) + 60, gcDiam * grandChildren.length / (2*Math.PI));
       grandChildren.forEach((gc, j) => {
-        const ga = a + (j - (grandChildren.length-1)/2) * 0.5;
+        /* 부모 방향 반대쪽으로 펼침 */
+        const ga = a + (j - (grandChildren.length-1)/2) * (Math.PI * 2 / Math.max(grandChildren.length, 3));
         POS[gc.id] = {
-          x: _clamp(POS[child.id].x + Math.cos(ga)*gcR, 30, W-30),
-          y: _clamp(POS[child.id].y + Math.sin(ga)*gcR, 30, H-30)
+          x: _clamp(POS[child.id].x + Math.cos(ga)*gcOrbit, 36, W-36),
+          y: _clamp(POS[child.id].y + Math.sin(ga)*gcOrbit, 36, H-36)
         };
         placed.add(gc.id);
       });
     });
   });
 
-  /* ⑤ 나머지(루트 + 아직 미배치) 외곽 배치 */
+  /* ─── 나머지(독립 노드) 외곽 배치 ─── */
   const remaining = ppl.filter(p => !placed.has(p.id));
-  const outerR = Math.min(W, H) * 0.38;
+  const outerR    = Math.min(W, H) * 0.40;
   remaining.forEach((p, i) => {
     const a = (i / Math.max(1, remaining.length)) * Math.PI * 2 - Math.PI/2;
     POS[p.id] = {
-      x: _clamp(cx + Math.cos(a) * outerR, 30, W-30),
-      y: _clamp(cy + Math.sin(a) * outerR, 30, H-30)
+      x: _clamp(cx + Math.cos(a) * outerR, 36, W-36),
+      y: _clamp(cy + Math.sin(a) * outerR, 36, H-36)
     };
     placed.add(p.id);
   });
 
-  /* ⑥ 겹침 방지 패스 (반복 3회) */
-  for(let pass=0; pass<3; pass++) _resolveOverlaps(ppl);
+  /* ─── 겹침 해소 — 충분히 반복 ─── */
+  for(let pass = 0; pass < 20; pass++) _resolveOverlaps(ppl);
 }
 
 function _placeNewNode(p, ppl){
-  /* 부모 위치 기준으로 배치, 없으면 화면 가장자리 */
-  let bx = W*0.85, by = 40;
+  let bx = W * 0.85, by = 50;
   if(p.ref && POS[p.ref]){
     const parent = POS[p.ref];
-    /* 부모 주변 미사용 각도 찾기 */
     const siblings = ppl.filter(q => q.ref===p.ref && POS[q.id] && q.id!==p.id);
     const usedAngles = siblings.map(s => Math.atan2(POS[s.id].y-parent.y, POS[s.id].x-parent.x));
-    let bestA = 0;
-    for(let a=0; a<Math.PI*2; a+=0.3){
-      if(usedAngles.every(ua => Math.abs(ua-a)>0.25)){ bestA=a; break; }
+    let bestA = 0, bestGap = 0;
+    for(let a = 0; a < Math.PI*2; a += 0.2){
+      const gap = usedAngles.reduce((mn,ua)=>Math.min(mn, Math.abs(ua-a)), Math.PI*2);
+      if(gap > bestGap){ bestGap=gap; bestA=a; }
     }
-    const dist = nodeR(ppl.find(q=>q.id===p.ref)||p) + 65;
+    const parentNode = ppl.find(q=>q.id===p.ref) || p;
+    const dist = nodeR(parentNode) + nodeR(p) + 40;
     bx = parent.x + Math.cos(bestA)*dist;
     by = parent.y + Math.sin(bestA)*dist;
   }
-  POS[p.id] = { x: _clamp(bx, 30, W-30), y: _clamp(by, 30, H-30) };
-  _resolveOverlaps(ppl);
+  POS[p.id] = { x: _clamp(bx, 36, W-36), y: _clamp(by, 36, H-36) };
+  for(let i=0; i<10; i++) _resolveOverlaps(ppl);
 }
 
 function _resolveOverlaps(ppl){
@@ -473,19 +476,20 @@ function _resolveOverlaps(ppl){
       const a=ppl[i], b=ppl[j];
       const pa=POS[a.id], pb=POS[b.id];
       if(!pa||!pb) continue;
-      const minDist = nodeR(a) + nodeR(b) + 18;
+      /* 최소 거리 = 두 노드 반지름 합 + 여유 24px */
+      const minDist = nodeR(a) + nodeR(b) + 24;
       const dx=pb.x-pa.x, dy=pb.y-pa.y;
-      const d=Math.sqrt(dx*dx+dy*dy)||1;
+      const d=Math.sqrt(dx*dx+dy*dy)||0.1;
       if(d < minDist){
-        const push = (minDist - d) / 2;
+        const push = (minDist - d) / 2 + 1;
         const nx=dx/d, ny=dy/d;
-        /* 허브는 덜 밀림 */
-        const wa = isHub(a.id)?0.2:0.5;
-        const wb = isHub(b.id)?0.2:0.5;
-        pa.x = _clamp(pa.x - nx*push*wa, 20, W-20);
-        pa.y = _clamp(pa.y - ny*push*wa, 20, H-20);
-        pb.x = _clamp(pb.x + nx*push*wb, 20, W-20);
-        pb.y = _clamp(pb.y + ny*push*wb, 20, H-20);
+        /* 허브는 더 안 밀리고, 리프 쪽을 많이 밀어냄 */
+        const wa = isHub(a.id) ? 0.15 : 0.5;
+        const wb = isHub(b.id) ? 0.15 : 0.5;
+        pa.x = _clamp(pa.x - nx*push*wa, 24, W-24);
+        pa.y = _clamp(pa.y - ny*push*wa, 24, H-24);
+        pb.x = _clamp(pb.x + nx*push*wb, 24, W-24);
+        pb.y = _clamp(pb.y + ny*push*wb, 24, H-24);
       }
     }
   }
@@ -854,45 +858,42 @@ document.getElementById('btnSave').addEventListener('click',()=>{
    오프라인 거점 + 접근 문자 초안까지 제공
 ════════════════════════════════════════════════════════════════ */
 
-/* 검색 URL 헬퍼 */
-const urlNaverCafe  = (r,kw) => `https://cafe.naver.com/ArticleSearchList.nhn?search.query=${encodeURIComponent(r+' '+kw)}&search.sortBy=date`;
+/* 검색 URL 헬퍼 — 앱 설치 없이 브라우저에서 바로 열리는 것만 */
+const urlGoogle     = (r,kw) => `https://www.google.com/search?q=${encodeURIComponent(r+' '+kw)}`;
 const urlKakaoMap   = (r,kw) => `https://map.kakao.com/?q=${encodeURIComponent(r+' '+kw)}`;
-const urlBand       = (r,kw) => `https://band.us/search?q=${encodeURIComponent(r+' '+kw)}`;
-const urlDaangn     = (r,kw) => `https://www.daangn.com/search?q=${encodeURIComponent(r+' '+kw)}`;
 const urlNaverPlace = (r,kw) => `https://map.naver.com/p/search/${encodeURIComponent(r+' '+kw)}`;
 
-/* 커뮤니티 유형 정의 */
+/* 커뮤니티 유형 정의 — 채널은 앱 설치 불필요한 웹 검색만 */
 const COMM_TYPES = [
   {
     id:'momcafe', ic:'👶', label:'맘카페·학부모',
-    /* 메모나 소개 경로에 자녀 관련 단서가 있으면 우선 추천 */
     priority: (p) => /자녀|아이|아들|딸|학부모|육아|어린이|초등|중학|고등/i.test(p.memo||'') ? 2 : 0,
     channels:[
-      { name:'네이버 카페',    url:(r)=>urlNaverCafe(r,'맘카페'),     ic:'☕', type:'온라인' },
-      { name:'밴드',           url:(r)=>urlBand(r,'엄마 모임'),       ic:'🎗', type:'온라인' },
-      { name:'당근 동네생활',  url:(r)=>urlDaangn(r,'엄마 모임'),     ic:'🥕', type:'온라인' },
+      { name:'구글 검색',  url:(r)=>urlGoogle(r,'맘카페 모임'),     ic:'🔍' },
+      { name:'카카오맵',   url:(r)=>urlKakaoMap(r,'키즈카페'),       ic:'📍' },
+      { name:'네이버 지도',url:(r)=>urlNaverPlace(r,'문화센터'),      ic:'🗺' },
     ],
-    offline:{ label:'키즈카페·문화센터', url:(r)=>urlKakaoMap(r,'키즈카페') },
+    offline:{ label:'키즈카페·문화센터 찾기', url:(r)=>urlKakaoMap(r,'키즈카페') },
     script:(r,name)=>`안녕하세요 ${name}님! 혹시 ${r} 지역 맘카페나 학부모 모임 활동하세요? 자녀 교육이나 건강 보장 관련 정보 나누는 모임 있으면 저도 참여하고 싶어서요 😊 혹시 소개받을 수 있을까요?`,
   },
   {
     id:'health', ic:'💪', label:'헬스장·운동 모임',
     priority: (p) => /운동|헬스|테니스|골프|등산|러닝|배드민턴|수영|필라테스|요가/i.test(p.memo||'') ? 2 : 0,
     channels:[
-      { name:'네이버 플레이스', url:(r)=>urlNaverPlace(r,'헬스장'),   ic:'📍', type:'오프라인' },
-      { name:'당근 동네생활',   url:(r)=>urlDaangn(r,'운동 모임'),    ic:'🥕', type:'온라인' },
-      { name:'밴드',            url:(r)=>urlBand(r,'운동 동호회'),    ic:'🎗', type:'온라인' },
+      { name:'카카오맵',   url:(r)=>urlKakaoMap(r,'헬스장'),         ic:'📍' },
+      { name:'네이버 지도',url:(r)=>urlNaverPlace(r,'헬스장'),         ic:'🗺' },
+      { name:'구글 검색',  url:(r)=>urlGoogle(r,'운동 모임 동호회'),   ic:'🔍' },
     ],
     offline:{ label:'헬스장·체육관 찾기', url:(r)=>urlKakaoMap(r,'헬스장') },
     script:(r,name)=>`${name}님, 요즘 운동 열심히 하시죠? 저도 ${r}에서 운동 모임 함께하고 싶은데요. 혹시 다니시는 헬스장이나 운동 동호회 있으시면 한번 소개해 주실 수 있을까요?`,
   },
   {
     id:'local', ic:'🏘', label:'주민·동네 모임',
-    priority: (p) => 1, /* 지역 기반이면 항상 기본 추천 */
+    priority: (p) => 1,
     channels:[
-      { name:'당근 동네생활',  url:(r)=>urlDaangn(r,'동네 모임'),    ic:'🥕', type:'온라인' },
-      { name:'네이버 카페',    url:(r)=>urlNaverCafe(r,'주민 모임'),  ic:'☕', type:'온라인' },
-      { name:'밴드',           url:(r)=>urlBand(r,'주민 자치'),       ic:'🎗', type:'온라인' },
+      { name:'구글 검색',  url:(r)=>urlGoogle(r,'주민 모임 커뮤니티'), ic:'🔍' },
+      { name:'카카오맵',   url:(r)=>urlKakaoMap(r,'주민센터'),          ic:'📍' },
+      { name:'네이버 지도',url:(r)=>urlNaverPlace(r,'주민센터'),          ic:'🗺' },
     ],
     offline:{ label:'주민센터·복지관 찾기', url:(r)=>urlKakaoMap(r,'주민센터') },
     script:(r,name)=>`안녕하세요 ${name}님! ${r} 지역에서 주민 모임이나 동네 커뮤니티 활동하세요? 저도 지역 분들과 교류를 넓히고 싶은데, 혹시 아시는 모임 있으시면 소개 부탁드려도 될까요?`,
@@ -901,9 +902,9 @@ const COMM_TYPES = [
     id:'hobby', ic:'🎯', label:'취미·동호회',
     priority: (p) => /독서|영화|사진|음악|요리|낚시|캠핑|보드|게임|등산/i.test(p.memo||'') ? 2 : 0,
     channels:[
-      { name:'네이버 카페',  url:(r)=>urlNaverCafe(r,'동호회'),   ic:'☕', type:'온라인' },
-      { name:'밴드',         url:(r)=>urlBand(r,'취미 동호회'),   ic:'🎗', type:'온라인' },
-      { name:'당근 동네생활',url:(r)=>urlDaangn(r,'취미 모임'),   ic:'🥕', type:'온라인' },
+      { name:'구글 검색',  url:(r)=>urlGoogle(r,'취미 동호회 모임'), ic:'🔍' },
+      { name:'카카오맵',   url:(r)=>urlKakaoMap(r,'문화센터'),        ic:'📍' },
+      { name:'네이버 지도',url:(r)=>urlNaverPlace(r,'문화센터'),       ic:'🗺' },
     ],
     offline:{ label:'문화센터·강좌 찾기', url:(r)=>urlKakaoMap(r,'문화센터') },
     script:(r,name)=>`${name}님, 취미 활동 즐겨 하세요? 저도 ${r} 지역 동호회나 취미 모임에 관심이 있어서요. 혹시 활동하시는 모임 있으시면 한번 소개해 주시겠어요?`,
@@ -912,9 +913,9 @@ const COMM_TYPES = [
     id:'work', ic:'🏢', label:'직장인·비즈니스',
     priority: (p) => /자영업|사업|직장|회사|대표|사장|부장|팀장|임원|CEO/i.test(p.memo||'') ? 2 : 0,
     channels:[
-      { name:'네이버 카페',    url:(r)=>urlNaverCafe(r,'직장인 모임'), ic:'☕', type:'온라인' },
-      { name:'밴드',           url:(r)=>urlBand(r,'비즈니스 네트워크'),ic:'🎗', type:'온라인' },
-      { name:'네이버 플레이스',url:(r)=>urlNaverPlace(r,'공유오피스'), ic:'📍', type:'오프라인' },
+      { name:'구글 검색',  url:(r)=>urlGoogle(r,'직장인 모임 네트워크'), ic:'🔍' },
+      { name:'카카오맵',   url:(r)=>urlKakaoMap(r,'공유오피스'),          ic:'📍' },
+      { name:'네이버 지도',url:(r)=>urlNaverPlace(r,'공유오피스'),          ic:'🗺' },
     ],
     offline:{ label:'공유오피스·비즈니스센터', url:(r)=>urlKakaoMap(r,'공유오피스') },
     script:(r,name)=>`안녕하세요 ${name}님! ${r} 지역에서 비즈니스 네트워크 모임 혹시 참여하고 계신가요? 직장인이나 자영업자 분들과 교류하는 모임이 있다면 소개해 주시면 정말 감사하겠습니다.`,
@@ -923,9 +924,9 @@ const COMM_TYPES = [
     id:'senior', ic:'👴', label:'시니어·실버 모임',
     priority: (p) => /부모님|어머니|아버지|어르신|시니어|은퇴|노후/i.test(p.memo||'') ? 2 : 0,
     channels:[
-      { name:'네이버 카페',    url:(r)=>urlNaverCafe(r,'시니어 모임'), ic:'☕', type:'온라인' },
-      { name:'당근 동네생활',  url:(r)=>urlDaangn(r,'경로당 모임'),    ic:'🥕', type:'온라인' },
-      { name:'네이버 플레이스',url:(r)=>urlNaverPlace(r,'복지관'),      ic:'📍', type:'오프라인' },
+      { name:'구글 검색',  url:(r)=>urlGoogle(r,'시니어 실버 모임'), ic:'🔍' },
+      { name:'카카오맵',   url:(r)=>urlKakaoMap(r,'복지관'),          ic:'📍' },
+      { name:'네이버 지도',url:(r)=>urlNaverPlace(r,'복지관'),          ic:'🗺' },
     ],
     offline:{ label:'복지관·경로당 찾기', url:(r)=>urlKakaoMap(r,'복지관') },
     script:(r,name)=>`${name}님, ${r} 지역 어르신들 모임이나 복지관 프로그램 같은 것 혹시 아세요? 노후 준비에 관심 있으신 분들께 도움이 될 정보를 나눠드리고 싶어서요.`,
@@ -1781,87 +1782,178 @@ function renderTodayFull(){
   renderTodayList();
 }
 
-/* ★ 소개 예측 — 오늘의 1순위 히어로 카드 */
-function renderTodayHero(){
-  const box = document.getElementById('todayHero'); if(!box) return;
-  if(!D.people.length){ box.innerHTML=''; return; }
+/* ═══ 오늘 할 일 — 관리 목적 / 기회 발굴 2섹션 ════════════════
 
-  const hero = pickTodayHero();
-  if(!hero){ box.innerHTML=''; return; }
+   관리 목적  : 관계온도가 낮거나 오래 연락 못 한 사람 → 먼저 챙겨야 할 분
+   기회 발굴  : 파이프라인 완료 직후, 소개 이력 있음, 최근 접촉 후 온도 높음
+               → 소개 요청하기 좋은 타이밍인 분
 
-  const { p, rs } = hero;
-  const col = REL[p.rel].col;
-  const d   = ago(p.lastContact);
+   공통 원칙  : 숫자(% · 점수)는 보여주지 않음, 이유만 한 줄로 표시
+════════════════════════════════════════════════════════════════ */
 
-  box.innerHTML = `
-    <div class="hero-card" onclick="openDetail(${p.id})">
-      <div class="hero-label">⭐ 오늘 연락할 1순위</div>
-      <div class="hero-body">
-        <div class="hero-av" style="background:linear-gradient(135deg,${lighten(col)},${col})">${esc((p.name||'?').charAt(0))}</div>
-        <div class="hero-info">
-          <div class="hero-name">${esc(p.name)}</div>
-          <div class="hero-sub">${REL[p.rel].lbl}${d!==null?' · '+d+'일 전 연락':' · 연락 기록 없음'}</div>
-        </div>
-        <div class="hero-score" style="color:${rs.color}">${rs.score}%</div>
-      </div>
-      <div class="hero-bar-wrap">
-        <div class="hero-bar-fill" style="width:${rs.score}%;background:${rs.color}"></div>
-      </div>
-      <div class="hero-msg">${rs.emoji} ${rs.msg}</div>
-      <button class="hero-call-btn" onclick="event.stopPropagation();markContact(${p.id});renderTodayFull()">
-        📞 오늘 연락했어요
-      </button>
-    </div>`;
+/* 사람별 오늘의 역할 분류 */
+function classifyPerson(p){
+  const temp = calcRelationshipTemp(p);
+  const rs   = calcReferralScore(p);
+  const d    = ago(p.lastContact);
+  const pl   = ensurePipeline(p);
+  const pipelineDone = pl.dates.filter(Boolean).length;
+
+  /* ── 기회 발굴 조건 (우선 판단) ─────────────────────────────
+     1) 파이프라인 4단계(보험가입) 방금 완료 → 소개 요청 타이밍
+     2) 소개 이력 1건 이상 + 최근 14일 이내 연락 → 다시 소개 요청 가능
+     3) 관계온도 높고(60+) 소개예측 점수 높음(50+) → 지금이 적기
+  ──────────────────────────────────────────────────────────── */
+  if(pipelineDone >= 4 && rs.score >= 40){
+    let reason = '';
+    if(pipelineDone === 4) reason = '보험가입 완료 — 소개 요청 드리기 좋은 시점이에요';
+    else if(pipelineDone === 5) reason = '지인소개까지 완료 — 추가 소개를 부탁해보세요';
+    else reason = '영업 진행이 잘 되고 있어요 — 소개 요청해보세요';
+    return { type:'opportunity', reason };
+  }
+
+  if(rc(p.id) >= 1 && d !== null && d <= 14 && temp.total >= 50){
+    return { type:'opportunity', reason: `최근 소개 이력 있음 — 다시 한번 부탁드려보세요` };
+  }
+
+  if(temp.total >= 65 && rs.score >= 50){
+    return { type:'opportunity', reason: '관계가 좋을 때 소개 요청 드리면 성공률이 높아요' };
+  }
+
+  /* ── 관리 목적 조건 ─────────────────────────────────────────
+     1) 관계온도 낮음(40 미만) → 식어가는 관계 복구 필요
+     2) 오래 연락 안 함(기준일 초과) → 안부 연락 필요
+     3) 접촉 기록 없음 → 첫 연락 필요
+  ──────────────────────────────────────────────────────────── */
+  const thr = getPersonThr(p);
+  if(d === null){
+    return { type:'manage', reason: '아직 한 번도 연락하지 않았어요 — 첫 연락을 드려보세요' };
+  }
+  if(temp.total < 35){
+    return { type:'manage', reason: `${d}일째 연락이 없어요 — 관계가 식기 전에 안부를 물어보세요` };
+  }
+  if(d >= thr){
+    return { type:'manage', reason: `마지막 연락이 ${d}일 전이에요 — 안부 연락 드릴 시간이에요` };
+  }
+
+  return null; // 오늘 챙길 필요 없음
 }
 
-/* 나머지 할 일 목록 — 심플하게 */
-function renderTodayList(){
-  const box = document.getElementById('todayDash'); if(!box) return;
-  const today = new Date().toISOString().slice(0,10);
+/* 오늘 할 일 전체 렌더링 */
+function renderTodayFull(){
+  /* 날짜 헤더 */
+  const hdrEl = document.getElementById('todayDateHdr');
+  if(hdrEl){
+    const now = new Date();
+    const DOW = ['일','월','화','수','목','금','토'];
+    hdrEl.innerHTML = `
+      <div class="today-date-main">${now.getMonth()+1}월 ${now.getDate()}일 (${DOW[now.getDay()]})</div>
+      <div class="today-date-sub">${D.people.length ? '오늘 챙길 분을 확인하세요' : '먼저 인맥을 추가해보세요'}</div>`;
+  }
 
-  /* 연락 필요 (히어로 제외, 최대 3명) */
-  const hero = pickTodayHero();
-  const heroId = hero ? hero.p.id : null;
-  const needContact = buildAlerts()
-    .filter(i => i.lvl > 0 && i.p.id !== heroId)
-    .slice(0, 3);
+  const heroBox = document.getElementById('todayHero');
+  const dashBox = document.getElementById('todayDash');
+  if(heroBox) heroBox.innerHTML = '';
+  if(!dashBox) return;
+
+  if(!D.people.length){
+    dashBox.innerHTML = `<div class="tl-empty">
+      <div class="tl-empty-ic">👥</div>
+      <div class="tl-empty-msg">아직 등록된 인맥이 없어요</div>
+      <button class="btn btn-primary" onclick="openForm()" style="margin:0 24px">＋ 인맥 추가하기</button>
+    </div>`;
+    return;
+  }
+
+  /* 분류 */
+  const manage     = [];
+  const opportunity = [];
+  D.people.forEach(p => {
+    if(p.rel==='prospect') return; // 신규 고객은 관리 목적만
+    const cls = classifyPerson(p);
+    if(!cls) return;
+    if(cls.type === 'manage')      manage.push({ p, reason: cls.reason });
+    if(cls.type === 'opportunity') opportunity.push({ p, reason: cls.reason });
+  });
+
+  /* 신규 고객은 관리 목적으로만 */
+  D.people.filter(p=>p.rel==='prospect').forEach(p=>{
+    const d = ago(p.lastContact);
+    const thr = getPersonThr(p);
+    if(d===null || d>=thr){
+      manage.push({ p, reason: d===null ? '첫 연락을 드려보세요' : `${d}일 전 연락 — 팔로업이 필요해요` });
+    }
+  });
+
+  /* 관리 목적: 관계온도 낮은 순 정렬 */
+  manage.sort((a,b) => calcRelationshipTemp(a.p).total - calcRelationshipTemp(b.p).total);
+  /* 기회 발굴: 소개예측 점수 높은 순 */
+  opportunity.sort((a,b) => calcReferralScore(b.p).score - calcReferralScore(a.p).score);
 
   /* 오늘 일정 */
+  const today = new Date().toISOString().slice(0,10);
   const todayScheds = (SCHEDS||[])
-    .filter(s => s.date===today)
+    .filter(s => s.date === today)
     .sort((a,b) => (a.time||'').localeCompare(b.time||''));
 
   let html = '';
 
-  /* 연락 더 필요한 분 */
-  if(needContact.length){
+  /* ── 기회 발굴 섹션 ── */
+  if(opportunity.length){
     html += `<div class="tl-section">
-      <div class="tl-title">📞 연락이 필요해요</div>`;
-    needContact.forEach(it=>{
-      const d = ago(it.p.lastContact);
-      html += `<div class="tl-row" onclick="openDetail(${it.p.id})">
-        <div class="tl-av" style="background:${REL[it.p.rel].col}">${esc((it.p.name||'?').charAt(0))}</div>
+      <div class="tl-section-hdr opp">
+        <span class="tl-section-ic">🌟</span>
+        <span class="tl-section-ttl">소개 요청하기 좋은 타이밍</span>
+      </div>`;
+    opportunity.slice(0,3).forEach(({p, reason})=>{
+      const col = REL[p.rel].col;
+      html += `<div class="tl-row" onclick="openDetail(${p.id})">
+        <div class="tl-av" style="background:linear-gradient(135deg,${lighten(col)},${col})">${esc((p.name||'?').charAt(0))}</div>
         <div class="tl-info">
-          <div class="tl-name">${esc(it.p.name)}</div>
-          <div class="tl-sub">${d!==null?d+'일 전 연락':'연락 기록 없음'}</div>
+          <div class="tl-name">${esc(p.name)}<span class="pbadge" style="background:${col}22;color:${col};margin-left:6px">${REL[p.rel].sh}</span></div>
+          <div class="tl-reason opp">${reason}</div>
         </div>
-        <button class="tl-done" onclick="event.stopPropagation();markContact(${it.p.id});renderTodayFull()">완료</button>
+        <button class="tl-done opp" onclick="event.stopPropagation();markContact(${p.id});renderTodayFull()">연락완료</button>
       </div>`;
     });
     html += `</div>`;
   }
 
-  /* 오늘 일정 */
+  /* ── 관리 목적 섹션 ── */
+  if(manage.length){
+    html += `<div class="tl-section">
+      <div class="tl-section-hdr mgmt">
+        <span class="tl-section-ic">📞</span>
+        <span class="tl-section-ttl">먼저 안부를 챙겨야 할 분</span>
+      </div>`;
+    manage.slice(0,4).forEach(({p, reason})=>{
+      const col = REL[p.rel].col;
+      html += `<div class="tl-row" onclick="openDetail(${p.id})">
+        <div class="tl-av" style="background:linear-gradient(135deg,${lighten(col)},${col})">${esc((p.name||'?').charAt(0))}</div>
+        <div class="tl-info">
+          <div class="tl-name">${esc(p.name)}<span class="pbadge" style="background:${col}22;color:${col};margin-left:6px">${REL[p.rel].sh}</span></div>
+          <div class="tl-reason mgmt">${reason}</div>
+        </div>
+        <button class="tl-done mgmt" onclick="event.stopPropagation();markContact(${p.id});renderTodayFull()">연락완료</button>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  /* ── 오늘 일정 ── */
   if(todayScheds.length){
     html += `<div class="tl-section">
-      <div class="tl-title">📅 오늘 일정</div>`;
+      <div class="tl-section-hdr sched">
+        <span class="tl-section-ic">📅</span>
+        <span class="tl-section-ttl">오늘 일정</span>
+      </div>`;
     todayScheds.slice(0,3).forEach(s=>{
       const person = s.personId ? D.people.find(p=>p.id===s.personId) : null;
       html += `<div class="tl-row" onclick="document.querySelector('.nitem[data-v=cal]').click()">
         <div class="tl-time">${s.time||'—'}</div>
         <div class="tl-info">
           <div class="tl-name">${esc(s.title)}</div>
-          ${person?`<div class="tl-sub">👤 ${esc(person.name)}</div>`:''}
+          ${person?`<div class="tl-reason">${esc(person.name)}님과의 일정</div>`:''}
         </div>
         <span class="tl-arr">›</span>
       </div>`;
@@ -1869,25 +1961,29 @@ function renderTodayList(){
     html += `</div>`;
   }
 
-  /* 전부 없을 때 */
-  if(!html && !hero){
+  /* ── 할 일 없을 때 ── */
+  if(!manage.length && !opportunity.length && !todayScheds.length){
     html = `<div class="tl-empty">
       <div class="tl-empty-ic">🎉</div>
-      <div class="tl-empty-msg">오늘 할 일이 없어요<br>인맥을 추가하면 관리가 시작돼요</div>
-      <button class="btn btn-primary" onclick="openForm()" style="margin:0 24px">＋ 인맥 추가하기</button>
+      <div class="tl-empty-msg">오늘은 모두 잘 관리되고 있어요!</div>
     </div>`;
   }
 
-  box.innerHTML = html;
+  dashBox.innerHTML = html;
 }
 
+/* renderTodayHero는 renderTodayFull로 통합됨 */
+function renderTodayHero(){}
+
+/* 나머지 할 일 목록 */
+function renderTodayList(){}
+
 function renderTodayDash(){
-  /* refresh()에서 호출 — 현재 탭이 오늘이면 풀뷰 갱신 */
   const activeTab = document.querySelector('.nitem.on');
   if(activeTab && activeTab.dataset.v==='today') renderTodayFull();
 }
 
-function renderTempSummary(){ /* 삭제됨 — renderTodayFull로 통합 */ }
+function renderTempSummary(){}
 
 /* ─── 고객 유형별 기본 알림 주기 ─── */
 const DEFAULT_THR = { customer:30, friend:15, prospect:7 };
