@@ -391,81 +391,116 @@ function resize(){
   cvs.style.width=W+'px'; cvs.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-/* ═══ 연결망 레이아웃 — 정적 배치 (허브 중심) ═══════════════════
-   기존에는 매 프레임 흔들리는 포스 시뮬레이션이었으나,
-   "화면이 계속 움직여서 보기 불편하다"는 피드백에 따라
-   한 번 계산해서 고정하는 방식으로 변경.
-   - 가장 영향력 큰(소개를 많이 받은) 인물을 정중앙에 고정
-   - 그 사람이 직접 소개한 인맥을 1차 동심원에 배치
-   - 2차 소개는 2차 동심원, 그 이상은 바깥쪽 원에 순서대로 배치
-   - 소개 관계가 없는 인맥(직접 인맥)은 가장 바깥쪽에 별도 배치
+/* ═══ 연결망 레이아웃 — 허브 중심 동심원 고정 배치 ═════════════
+   선이 최대한 겹치지 않도록:
+   1) 소개를 가장 많이 받은 허브를 중앙에 고정
+   2) 각 노드를 부모 노드 방향으로 "부채꼴"로 배치
+      → 같은 부모의 자식들이 부모 방향을 중심으로 퍼짐
+   3) 소개 관계가 없는 노드는 가장 바깥 원에 균등 배치
 ════════════════════════════════════════════════════════════════ */
 function layoutNetwork(){
   const cx=W/2, cy=H/2;
   const ppl=D.people;
   if(!ppl.length) return;
 
-  /* 1) 중심 허브 선정 — 가장 많이 소개해 준 인물(영향력 1위) */
+  /* 1) 영향력 1위(소개 최다)를 중심 허브로 선정 */
   let center=null, maxRc=-1;
   ppl.forEach(p=>{ const r=rc(p.id); if(r>maxRc){ maxRc=r; center=p; } });
 
-  /* 2) BFS로 중심 허브로부터의 "소개 단계(depth)" 계산 */
-  const depth={};
-  const children={}; // personId -> [소개한 사람들]
+  /* 2) 부모→자식 맵 구성 */
+  const children={}; // id → [childId, ...]
   ppl.forEach(p=>{ if(p.ref!=null){ (children[p.ref]=children[p.ref]||[]).push(p.id); } });
 
+  /* 3) BFS로 depth + parentId 계산 */
+  const depth={}, parentId={};
   if(center){
-    depth[center.id]=0;
+    depth[center.id]=0; parentId[center.id]=null;
     const queue=[center.id];
     while(queue.length){
       const cur=queue.shift();
       (children[cur]||[]).forEach(childId=>{
-        if(depth[childId]===undefined){ depth[childId]=depth[cur]+1; queue.push(childId); }
+        if(depth[childId]===undefined){
+          depth[childId]=depth[cur]+1;
+          parentId[childId]=cur;
+          queue.push(childId);
+        }
       });
     }
   }
+  const maxDepth=Math.max(0,...Object.values(depth));
+  const outerRing=maxDepth+1;
+  ppl.forEach(p=>{ if(depth[p.id]===undefined){ depth[p.id]=outerRing; parentId[p.id]=null; } });
 
-  /* 3) depth가 없는(연결 안 된) 사람들은 가장 바깥 링으로 */
-  const maxDepth = Math.max(0, ...Object.values(depth));
-  const outerRing = maxDepth+1;
-  ppl.forEach(p=>{ if(depth[p.id]===undefined) depth[p.id]=outerRing; });
+  /* 4) 중심 노드 배치 */
+  if(center) POS[center.id]={x:cx,y:cy,vx:0,vy:0};
 
-  /* 4) 같은 depth끼리 그룹핑 후 동심원에 균등 배치 */
+  /* 5) BFS 순서로 각 노드를 "부모 기준 부채꼴"로 배치
+         → 형제 노드들이 부모 방향으로 모여서 선이 덜 겹침 */
+  const ringGap=120;
   const byDepth={};
   ppl.forEach(p=>{ (byDepth[depth[p.id]]=byDepth[depth[p.id]]||[]).push(p); });
 
-  const ringGap = 115; // 동심원 간 간격(px, 월드 좌표 기준)
-  Object.keys(byDepth).forEach(dStr=>{
+  Object.keys(byDepth).sort((a,b)=>+a-+b).forEach(dStr=>{
     const d=+dStr;
+    if(d===0) return; // 중심은 이미 배치됨
+
+    const radius = d===outerRing ? ringGap*(maxDepth+1.6) : ringGap*d;
     const group=byDepth[d];
-    if(d===0){
-      // 중심 허브는 정중앙 고정
-      group.forEach(p=>{ POS[p.id]={x:cx,y:cy,vx:0,vy:0}; });
-      return;
-    }
-    const radius = ringGap*d;
-    const n=group.length;
-    group.forEach((p,i)=>{
-      // 약간의 각도 오프셋(depth마다 회전)으로 방사형 라인이 겹치지 않게
-      const angleOffset = d*0.4;
-      const a = (i/n)*Math.PI*2 + angleOffset;
-      POS[p.id]={ x:cx+Math.cos(a)*radius, y:cy+Math.sin(a)*radius, vx:0, vy:0 };
+
+    /* 같은 부모를 공유하는 형제끼리 그룹핑 */
+    const sibGroups={};
+    group.forEach(p=>{
+      const pid=parentId[p.id];
+      const key=pid!=null?String(pid):'outer';
+      (sibGroups[key]=sibGroups[key]||[]).push(p);
+    });
+
+    Object.values(sibGroups).forEach(sibs=>{
+      const pid=parentId[sibs[0].id];
+      let baseAngle;
+      if(pid!=null && POS[pid]){
+        /* 부모 위치 기준 각도를 중심으로 형제들을 퍼뜨림 */
+        const pp=POS[pid];
+        baseAngle=Math.atan2(pp.y-cy, pp.x-cx);
+      } else {
+        /* 직접 인맥(outer ring)은 전체 원에 균등 배치 */
+        const totalOuter=(byDepth[outerRing]||[]).length;
+        const idx=(byDepth[outerRing]||[]).indexOf(sibs[0]);
+        baseAngle=(idx/Math.max(1,totalOuter))*Math.PI*2;
+      }
+
+      const n=sibs.length;
+      /* 형제 수에 따라 퍼지는 각도 범위 결정 */
+      const spread = n===1 ? 0 : Math.min(Math.PI*0.9, (n-1)*0.55);
+      sibs.forEach((p,i)=>{
+        const a = n===1 ? baseAngle : baseAngle - spread/2 + (spread/(n-1))*i;
+        /* 이미 드래그로 위치가 잡혀있으면 유지 */
+        if(!POS[p.id]){
+          POS[p.id]={x:cx+Math.cos(a)*radius, y:cy+Math.sin(a)*radius, vx:0, vy:0};
+        }
+      });
     });
   });
 }
 
 function initPos(){
-  /* 사람 수가 바뀌었을 때만 레이아웃을 다시 계산.
-     드래그로 옮긴 위치는 D.people이 바뀌기 전까지 유지된다. */
   const n=D.people.length;
-  if(ST.lastLayoutCount!==n || D.people.some(p=>!POS[p.id])){
-    layoutNetwork();
+  const hasNew=D.people.some(p=>!POS[p.id]);
+  if(ST.lastLayoutCount!==n || hasNew){
+    /* 새 인맥이 추가됐을 때만 전체 재계산 */
+    if(ST.lastLayoutCount!==n){
+      /* 인원 수가 바뀌면 기존 POS를 유지하면서 새 인맥만 추가 */
+      Object.keys(POS).forEach(id=>{
+        if(!D.people.find(p=>p.id===+id)) delete POS[+id];
+      });
+      layoutNetwork();
+    } else if(hasNew){
+      layoutNetwork();
+    }
     ST.lastLayoutCount=n;
   }
 }
 function sim(){
-  /* 정적 배치로 전환되어 더 이상 매 프레임 위치를 계산하지 않는다.
-     드래그 중인 노드만 사용자 입력을 그대로 반영한다. */
   ST.simActive=false;
 }
 
@@ -1358,26 +1393,37 @@ document.getElementById('calNext').addEventListener('click', () => {
 
 /* ═══ 내비게이션 ════════════════════════════════════════════════ */
 function switchTab(v){
+  /* 하단 탭 활성화 */
   document.querySelectorAll('.nitem').forEach(n=>n.classList.remove('on'));
   const target=document.querySelector(`.nitem[data-v="${v}"]`);
   if(target) target.classList.add('on');
-  closeAllViews();
+
+  /* 서브 뷰(인맥목록/일정/알림) 오버레이 닫기 */
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('show'));
+
+  /* 메인 패널 전환 (오늘 할 일 vs 연결망) */
+  const panels=['vToday','vMap'];
+  panels.forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.classList.remove('active');
+  });
+
   if(v==='today'){
-    document.getElementById('vToday').classList.add('show');
+    document.getElementById('vToday').classList.add('active');
     renderTodayDash();
-  }
-  if(v==='map'){
-    document.getElementById('vMap').classList.add('show');
-  }
-  if(v==='list'){
+  } else if(v==='map'){
+    document.getElementById('vMap').classList.add('active');
+  } else if(v==='list'){
+    /* 서브 뷰는 오버레이로 표시 — 뒤에 연결망이 계속 보임 */
+    document.getElementById('vMap').classList.add('active');
     document.getElementById('vList').classList.add('show');
     renderList();
-  }
-  if(v==='cal'){
+  } else if(v==='cal'){
+    document.getElementById('vMap').classList.add('active');
     document.getElementById('vCal').classList.add('show');
     renderCal();
-  }
-  if(v==='alerts'){
+  } else if(v==='alerts'){
+    document.getElementById('vMap').classList.add('active');
     document.getElementById('vAlert').classList.add('show');
     renderAlerts();
   }
@@ -1387,11 +1433,9 @@ document.querySelectorAll('.nitem').forEach(ni=>{
   ni.addEventListener('click',()=>switchTab(ni.dataset.v));
 });
 
-function closeAllViews(){
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('show'));
-}
+function closeAllViews(){ document.querySelectorAll('.view').forEach(v=>v.classList.remove('show')); }
 function closeView(){
-  /* 뒤로가기 → 항상 오늘 할 일 탭으로 */
+  closeAllViews();
   switchTab('today');
 }
 
@@ -1427,6 +1471,19 @@ function startWithSample(){
 /* ═══ 통계 갱신 ═════════════════════════════════════════════════ */
 function refresh(){
   initPos();
+  /* 통계 바 */
+  const stTotal=document.getElementById('stTotal');
+  const stEdge=document.getElementById('stEdge');
+  const stRate=document.getElementById('stRate');
+  const stAlert=document.getElementById('stAlert');
+  if(stTotal) stTotal.textContent=D.people.length;
+  if(stEdge)  stEdge.textContent=D.people.filter(p=>p.ref).length;
+  if(stRate){
+    const rate=calcSuccessRate();
+    if(rate===null){ stRate.textContent='—'; stRate.style.fontSize='18px'; }
+    else { stRate.textContent=rate+'%'; stRate.style.fontSize=rate===100?'12px':'13px'; }
+  }
+  if(stAlert) stAlert.textContent=buildAlerts().filter(i=>i.lvl>0).length;
   document.getElementById('cvHint').style.display=D.people.length?'none':'flex';
   renderTodayDash();
   renderList(); renderAlerts();
@@ -1950,7 +2007,7 @@ async function init(){
   await load();        /* 암호화 복호화 완료 후 진행 */
   await loadScheds();
   resize(); initPos(); refresh(); loop(); checkLock();
-  switchTab('today');   /* 앱 시작 시 오늘 할 일 탭으로 */
+  switchTab('today');
   checkOnboard();
   window.addEventListener('resize',resize);
   registerSW();

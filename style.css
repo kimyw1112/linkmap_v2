@@ -46,15 +46,37 @@ body { font-family:var(--font); color:var(--txt); font-size:15px; line-height:1.
 button { font-family:var(--font); cursor:pointer; border:none; background:none; color:inherit; }
 input,select,textarea { font-family:var(--font); font-size:16px; color:var(--txt); }
 
-/* ═══ 하단 탭 내비게이션 — 화면 최하단 고정 ═══════════════════ */
-.nav {
-  position: fixed; left: 0; right: 0; bottom: 0;
+/* ═══ #mainArea — 헤더/통계바/탭 사이 남은 공간 전부 ════════════ */
+#mainArea {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
   display: flex;
-  background: var(--surface);
-  border-top: 1px solid var(--border2);
-  padding-bottom: env(safe-area-inset-bottom, 0);
-  z-index: 30;
+  flex-direction: column;
 }
+
+/* ═══ .main-panel — 오늘 할 일 / 연결망 패널 ═══════════════════ */
+.main-panel {
+  flex: 1;
+  overflow: hidden;
+  display: none;
+  flex-direction: column;
+  position: relative;
+}
+.main-panel.active {
+  display: flex;
+}
+
+/* 오늘 할 일 패널은 세로 스크롤 */
+#vToday {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 12px 20px;
+  background: var(--bg);
+}
+
+/* 연결망 패널은 map-wrap이 전체 채움 */
+#vMap { }
 
 /* ═══ 공통 버튼 ══════════════════════════════════════════════════ */
 .btn {
@@ -494,13 +516,7 @@ input,select,textarea { font-family:var(--font); font-size:16px; color:var(--txt
 .cr-hist-date { color:var(--txt3); flex-shrink:0; }
 .cr-hist-result { font-weight:700; }
 
-/* ═══ 오늘 할 일 — 독립 홈 화면 ════════════════════════════════ */
-#vToday {
-  position:absolute; inset:0;
-  overflow-y:auto; -webkit-overflow-scrolling:touch;
-  padding:10px 12px 100px;
-  background:var(--bg);
-}
+/* ═══ 오늘 할 일 ════════════════════════════════════════════════ */
 .td-date {
   font-size:15px; font-weight:700; color:var(--txt2);
   padding:6px 2px 12px;
@@ -602,10 +618,26 @@ input,select,textarea { font-family:var(--font); font-size:16px; color:var(--txt
 .td-q-btn:active { background:var(--brand-pale); border-color:var(--brand); }
 .td-q-btn span { font-size:11px; font-weight:700; }
 
-/* ═══ 연결망 뷰 컨테이너 ════════════════════════════════════════ */
-#vMap {
-  position:absolute; inset:0;
+/* ═══ 서브 뷰 오버레이 (인맥목록/일정/알림) ════════════════════ */
+/* #app 기준 position:absolute — 헤더+통계바+탭 포함 전체를 덮음 */
+.view {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: var(--bg);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(105%);
+  transition: transform .3s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
 }
+.view.show { transform: translateX(0); }
+.vhdr { display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:2px solid var(--brand); background:#fff; flex-shrink:0; min-height:52px; }
+.vhdr h2 { font-family:var(--display); font-size:17px; font-weight:700; flex:1; letter-spacing:-.2px; }
+.vbody { flex:1; overflow-y:auto; padding:12px 14px; -webkit-overflow-scrolling:touch; }
+.srch { display:flex; gap:8px; padding:10px 14px 0; flex-shrink:0; }
+.srch input { flex:1; padding:11px 14px; background:#fff; border:1.5px solid var(--border); border-radius:12px; outline:none; font-size:16px; -webkit-appearance:none; }
+.srch input:focus { border-color:var(--brand); }
 
 /* ═══ 인맥 추가 2단계 폼 ════════════════════════════════════════ */
 .step-badge {
