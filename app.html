@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#E85A00">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none';">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="X-Frame-Options" content="DENY">
+<title>LinkMap</title>
+<link rel="stylesheet" href="style.css?v=202606210604">
+<link rel="manifest" href="manifest.json">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── 잠금 화면 ── -->
+  <div id="lockScreen" class="lock-screen" style="display:none">
+    <div class="lock-ic">🔐</div>
+    <div class="lock-t" id="lockT">잠금 해제</div>
+    <div class="lock-d" id="lockD">4자리 비밀번호를 입력하세요</div>
+    <div class="pdots" id="pdots"></div>
+    <div class="ppad"  id="ppad"></div>
+  </div>
+
+  <!-- ── 헤더 (항상 고정) ── -->
+  <div class="hdr">
+    <div class="logo"><div class="logo-mark">🔗</div>LinkMap</div>
+    <div class="hdr-right">
+      <button class="hbtn" id="btnPush"    title="푸시 알림 설정">🔔</button>
+      <button class="hbtn" id="btnExport"  title="백업">⬇</button>
+      <button class="hbtn" id="btnImport"  title="복원">⬆</button>
+      <button class="hbtn" id="btnSetting" title="설정">⚙</button>
+    </div>
+  </div>
+  <input type="file" id="fileIn" accept=".json" style="display:none">
+
+  <!-- ── 통계 바 (항상 고정) ── -->
+  <div class="stats" id="statsBar">
+    <div class="stat-card" style="--acc:var(--brand)">
+      <div class="stat-val" id="stTotal">0</div><div class="stat-lbl">전체 인맥</div>
+    </div>
+    <div class="stat-card" style="--acc:var(--blue)">
+      <div class="stat-val" id="stEdge">0</div><div class="stat-lbl">소개 연결</div>
+    </div>
+    <div class="stat-card" style="--acc:var(--green)" id="stRateCard">
+      <div class="stat-val" id="stRate" style="font-size:13px">—</div><div class="stat-lbl">소개 성공률</div>
+    </div>
+    <div class="stat-card" style="--acc:var(--red)">
+      <div class="stat-val" id="stAlert">0</div><div class="stat-lbl">연락 알림</div>
+    </div>
+  </div>
+
+  <!-- ── 중간 콘텐츠 영역 (flex:1 → 남는 공간 전부) ── -->
+  <div id="mainArea">
+
+    <!-- 오늘 할 일 (탭 전환으로 show/hide) -->
+    <div id="vToday" class="main-panel" style="display:none">
+      <div id="todayDash"></div>
+    </div>
+
+    <!-- 연결망 (기본 표시) -->
+    <div id="vMap" class="main-panel">
+      <div id="onboardOverlay" class="onboard-overlay" style="display:none">
+        <div class="onboard-card">
+          <div class="onboard-ic">🔗</div>
+          <h3>LinkMap에 오신 것을 환영합니다!</h3>
+          <p>소개 영업 관리를 시작해 보세요<br>먼저 고객을 등록하거나<br>샘플로 둘러볼 수 있습니다</p>
+          <button class="btn btn-primary" onclick="startWithSample()" style="margin-bottom:10px">✨ 샘플로 먼저 둘러보기</button>
+          <button class="btn btn-ghost"   onclick="closeOnboard()">+ 직접 고객 추가하기</button>
+        </div>
+      </div>
+
+      <div class="map-wrap" id="mapWrap">
+        <canvas id="cvs"></canvas>
+
+        <div class="filter-pills" id="filterBar">
+          <div class="fpill on" data-f="all" style="background:var(--brand);color:#fff;border-color:var(--brand)">전체</div>
+          <div class="fpill" data-f="customer">고객</div>
+          <div class="fpill" data-f="friend">지인</div>
+          <div class="fpill" data-f="prospect">신규</div>
+        </div>
+
+        <div class="map-legend">
+          <div class="lg-row"><span class="lg-dot" style="background:var(--c-customer)"></span>기존 고객</div>
+          <div class="lg-row"><span class="lg-dot" style="background:var(--c-friend)"></span>지인</div>
+          <div class="lg-row"><span class="lg-dot" style="background:var(--c-prospect)"></span>신규 고객</div>
+          <div class="lg-sep"></div>
+          <div class="lg-row" style="font-size:10px">⭐ 소개 허브</div>
+        </div>
+
+        <div class="map-zoom">
+          <button class="mzbtn" id="btnZoomIn">+</button>
+          <button class="mzbtn" id="btnZoomOut">−</button>
+          <button class="mzbtn" id="btnZoomReset" style="font-size:13px">⌂</button>
+        </div>
+
+        <button class="map-fab" id="fabAdd">＋</button>
+        <div id="tip"></div>
+
+        <div class="cv-hint" id="cvHint">
+          <div class="cv-hint-ic">🔗</div>
+          <h3>나의 소개 연결망을 만들어 보세요</h3>
+          <p>아래 <b>＋</b> 버튼으로 고객·지인을 추가하고<br>누가 누구를 소개했는지 연결하면<br>나만의 관계망이 그려집니다</p>
+        </div>
+      </div><!-- /mapWrap -->
+    </div><!-- /vMap -->
+
+  </div><!-- /mainArea -->
+
+  <!-- ── 하단 탭 (항상 고정) ── -->
+  <nav class="nav">
+    <div class="nitem" data-v="today">   <span class="nic">🏠</span><span class="nlb">오늘 할 일</span></div>
+    <div class="nitem on" data-v="map">  <span class="nic">🔗</span><span class="nlb">연결망</span></div>
+    <div class="nitem" data-v="list">    <span class="nic">👥</span><span class="nlb">인맥 목록</span></div>
+    <div class="nitem" data-v="cal">     <span class="nic">📅</span><span class="nlb">일정</span></div>
+    <div class="nitem" data-v="alerts">  <span class="nic">🔔</span><span class="nlb">알림</span></div>
+  </nav>
+
+  <!-- ── 오버레이 서브 뷰 (인맥목록 / 일정 / 알림) ── -->
+  <div class="view" id="vList">
+    <div class="vhdr">
+      <button class="icon-btn" onclick="closeView()">←</button>
+      <h2>인맥 목록</h2>
+    </div>
+    <div class="srch">
+      <input id="srchInput" type="search" placeholder="이름·지역 검색">
+    </div>
+    <div class="vbody" id="plist"></div>
+  </div>
+
+  <div class="view" id="vCal">
+    <div class="vhdr">
+      <button class="icon-btn" onclick="closeView()">←</button>
+      <h2>일정 관리</h2>
+    </div>
+    <div class="vbody">
+      <div class="cal-nav">
+        <button class="cal-arrow" id="calPrev">‹</button>
+        <span  class="cal-title" id="calTitle"></span>
+        <button class="cal-arrow" id="calNext">›</button>
+      </div>
+      <div class="cal-grid" id="calGrid"></div>
+      <div class="cal-events" id="calEvents"></div>
+    </div>
+  </div>
+
+  <div class="view" id="vAlert">
+    <div class="vhdr">
+      <button class="icon-btn" onclick="closeView()">←</button>
+      <h2>연락 알림</h2>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+        <span style="font-size:11px;color:var(--txt3)">기준일</span>
+        <input id="thrInput" type="number" min="1" max="365" style="width:52px;padding:4px 7px;border-radius:8px;border:1.5px solid var(--border);font-size:13px;text-align:center">
+        <span style="font-size:11px;color:var(--txt3)">일</span>
+      </div>
+    </div>
+    <div class="sort-hint">⭐ 소개를 많이 해준 고객을 우선으로 정렬했습니다</div>
+    <div class="vbody" id="alertBody" style="padding-top:6px"></div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- ── 오버레이들 ── -->
+<div id="overlay"   class="overlay" style="display:none"></div>
+<div id="detSheet"  class="sheet"   style="display:none">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3 id="detTitle">상세 정보</h3>
+    <button class="icon-btn" onclick="closeSheet()">✕</button>
+  </div>
+  <div class="sheet-body" id="detBody"></div>
+</div>
+
+<!-- 인맥 추가/수정 시트 -->
+<div class="sheet" id="shForm">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3 id="formTitle">인맥 추가</h3>
+    <button class="icon-btn" onclick="closeSheet()">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div id="formStep1">
+      <div class="step-badge">1단계 · 필수 정보</div>
+      <div class="field">
+        <label>관계 유형 *</label>
+        <div class="rel-row" id="relRow">
+          <div class="rel-opt" data-r="customer">기존 고객</div>
+          <div class="rel-opt" data-r="friend">지인</div>
+          <div class="rel-opt" data-r="prospect">신규 고객</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>이름 / 별칭 *</label>
+        <input id="fName" type="text" placeholder="예: 김OO  또는  헬스장 형">
+        <div class="hint">실명 대신 별칭 사용을 권장합니다</div>
+      </div>
+      <div class="field">
+        <label>활동 지역</label>
+        <input id="fRegion" type="text" placeholder="예: 성남시 분당구">
+        <div class="hint">입력하면 커뮤니티 검색 기능이 활성화됩니다</div>
+      </div>
+      <button class="btn btn-primary" id="btnStep2">다음 →  상세 정보 입력</button>
+      <button class="btn btn-ghost"   id="btnSaveQuick" style="margin-top:8px">이것만 저장하기</button>
+    </div>
+    <div id="formStep2" style="display:none">
+      <div class="step-badge step-badge-2">2단계 · 상세 정보 (선택)</div>
+      <div class="step-summary" id="formSummary"></div>
+      <div class="field">
+        <label>소개해 준 사람</label>
+        <select id="fRef"><option value="">— 직접 알게 됨 —</option></select>
+        <div class="hint">선택하면 연결망에 화살표가 자동 생성됩니다</div>
+      </div>
+      <div class="field">
+        <label>최근 접촉일</label>
+        <input id="fDate" type="date">
+        <div class="hint">입력하면 연락 알림을 받을 수 있습니다</div>
+      </div>
+      <div class="field">
+        <label>메모</label>
+        <textarea id="fMemo" placeholder="예: 자녀 2명, 자영업"></textarea>
+        <div class="hint-warn">⚠ 주민번호·연락처·계약금액 등 민감정보는 입력하지 마세요</div>
+      </div>
+      <button class="btn btn-primary" id="btnSave">저장하기</button>
+      <button class="btn btn-ghost" id="btnBackStep1" style="margin-top:8px">← 이전으로</button>
+    </div>
+  </div>
+</div>
+
+<!-- 일정 추가/수정 시트 -->
+<div class="sheet" id="shCal">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3 id="calFormTitle">일정 추가</h3>
+    <button class="icon-btn" onclick="closeSheet()">✕</button>
+  </div>
+  <div class="sheet-body">
+    <div class="field"><label>날짜 *</label><input id="cDate" type="date"></div>
+    <div class="field"><label>시간</label><input id="cTime" type="time"></div>
+    <div class="field"><label>제목 *</label><input id="cTitle" type="text" placeholder="예: 김OO님 미팅"></div>
+    <div class="field">
+      <label>관련 인맥</label>
+      <select id="cPerson"><option value="">— 없음 —</option></select>
+    </div>
+    <div class="field"><label>메모</label><textarea id="cMemo" placeholder="미팅 장소, 안건 등"></textarea></div>
+    <button class="btn btn-primary" id="btnCalSave">저장</button>
+    <button class="btn btn-danger" id="btnCalDel" style="display:none;margin-top:0">삭제</button>
+  </div>
+</div>
+
+<!-- 백업 확인 모달 -->
+<div id="exportModal" class="modal" style="display:none">
+  <div class="modal-card">
+    <div class="modal-title">⚠ 백업 전 주의사항</div>
+    <div class="modal-body">백업 파일에는 등록된 모든 고객 정보가 포함됩니다.<br>안전한 장소에 보관하시고 타인과 공유하지 마세요.</div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeModal()" style="margin-bottom:0">취소</button>
+      <button class="btn btn-primary" id="btnExportOk" style="margin-bottom:0">확인, 백업하기</button>
+    </div>
+  </div>
+</div>
+<div id="memoModal" class="modal" style="display:none">
+  <div class="modal-card">
+    <div class="modal-title">메모 포함 여부</div>
+    <div class="modal-body">메모에 민감한 내용이 있을 수 있습니다.<br>백업 파일에 메모를 포함하시겠습니까?</div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" id="btnMemoNo"  style="margin-bottom:0">메모 제외</button>
+      <button class="btn btn-primary" id="btnMemoYes" style="margin-bottom:0">포함하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 설정 시트 -->
+<div class="sheet" id="shSetting">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head"><h3>설정</h3><button class="icon-btn" onclick="closeSheet()">✕</button></div>
+  <div class="sheet-body">
+    <div class="field">
+      <label>PIN 잠금</label>
+      <button class="btn btn-ghost" id="btnPinToggle" style="margin-bottom:0"></button>
+    </div>
+    <div class="field" id="pinChangeArea" style="display:none">
+      <label>PIN 변경</label>
+      <button class="btn btn-ghost" id="btnPinChange" style="margin-bottom:0">PIN 변경하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 토스트 -->
+<div id="toast" class="toast" style="display:none"></div>
+
+<script src="app.js?v=202606210604"></script>
+</body>
+</html>
