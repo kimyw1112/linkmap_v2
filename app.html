@@ -2,24 +2,171 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="mobile-web-app-capable" content="yes">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#E85A00">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<meta name="theme-color" content="#E85A00">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'none';">
-<meta name="referrer" content="no-referrer">
-<meta http-equiv="X-Frame-Options" content="DENY">
-<title>LinkMap</title>
-<link rel="stylesheet" href="style.css?v=202606210604">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
+<title>LinkMap</title>
+<link rel="stylesheet" href="style.css?v=20260619">
+<style>
+/* ─── 앱 셸 ────────────────────────────────────────────────── */
+html,body { height:100%; overflow:hidden; background:var(--bg); }
+#app {
+  display:flex; flex-direction:column; height:100dvh; width:100%;
+  position:relative; overflow:hidden;
+}
+
+/* ─── 헤더 ──────────────────────────────────────────────────── */
+.hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px; flex-shrink:0; background:#fff;
+  border-bottom:2px solid var(--brand);
+  box-shadow:0 2px 8px rgba(232,90,0,.10);
+  padding-top:calc(10px + env(safe-area-inset-top));
+  min-height:calc(52px + env(safe-area-inset-top));
+}
+.logo { display:flex; align-items:center; gap:8px; font-family:var(--display); font-weight:800; font-size:18px; letter-spacing:-.3px; color:var(--brand); }
+.logo-mark { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,var(--brand-light),var(--brand2)); display:flex; align-items:center; justify-content:center; font-size:16px; }
+.hdr-right { display:flex; align-items:center; gap:6px; }
+.hbtn { width:34px; height:34px; border-radius:10px; background:var(--brand-pale); color:var(--brand); font-size:15px; border:1px solid rgba(232,90,0,.2); display:flex; align-items:center; justify-content:center; }
+.hbtn:active { background:var(--brand); color:#fff; }
+.hdr-user { display:flex; align-items:center; gap:6px; background:var(--brand-pale); border:1px solid rgba(232,90,0,.22); border-radius:10px; padding:4px 9px; max-width:150px; }
+.hdr-user-name { font-size:12px; font-weight:700; color:var(--brand); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:72px; }
+.hdr-user-emp  { font-size:10px; color:var(--brand2); font-family:var(--num); }
+.logout-btn { font-size:11px; color:var(--brand); padding:2px 7px; border-radius:6px; background:#fff; border:1px solid rgba(232,90,0,.3); }
+.logout-btn:active { background:var(--brand); color:#fff; }
+
+/* ─── 통계 바 ───────────────────────────────────────────────── */
+.stats { display:flex; margin:8px 10px 6px; gap:6px; flex-shrink:0; }
+.stat-card { flex:1; background:#fff; border:1px solid var(--border); border-radius:12px; padding:8px 4px; text-align:center; position:relative; overflow:hidden; }
+.stat-card::before { content:''; position:absolute; inset:0; opacity:.05; background:var(--acc,transparent); }
+.stat-val { font-family:var(--num); font-size:16px; font-weight:700; line-height:1; color:var(--acc,var(--txt)); letter-spacing:-.4px; }
+.stat-lbl { font-size:8.5px; color:var(--txt3); font-weight:700; letter-spacing:.2px; margin-top:3px; }
+
+/* ─── 맵 ────────────────────────────────────────────────────── */
+.map-wrap {
+  flex:1; position:relative; overflow:hidden;
+  background:
+    radial-gradient(ellipse at 25% 30%, rgba(232,90,0,.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 75% 70%, rgba(232,90,0,.04) 0%, transparent 50%),
+    #F5F0EB;
+}
+#cvs { width:100%; height:100%; display:block; touch-action:none; }
+#tip { position:absolute; pointer-events:none; background:rgba(28,20,10,.9); color:#fff; padding:7px 12px; border-radius:9px; font-size:12px; font-weight:600; box-shadow:var(--sh2); display:none; z-index:20; white-space:nowrap; }
+
+/* 레전드 */
+.map-legend { position:absolute; left:10px; top:10px; z-index:10; background:rgba(255,255,255,.95); backdrop-filter:blur(10px); border:1px solid var(--border); border-radius:10px; padding:8px 10px; box-shadow:var(--sh); display:flex; flex-direction:column; gap:5px; }
+.lg-row { display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--txt); font-weight:600; }
+.lg-dot { width:10px; height:10px; border-radius:3px; flex-shrink:0; }
+.lg-sep { height:1px; background:var(--border); margin:2px 0; }
+
+/* 필터 */
+.filter-pills { position:absolute; top:10px; left:0; right:0; z-index:10; display:flex; gap:7px; justify-content:center; padding:0 82px 0 12px; pointer-events:none; }
+.filter-pills>* { pointer-events:auto; }
+.fpill { padding:6px 14px; border-radius:20px; font-size:12px; font-weight:700; border:1.5px solid var(--border); background:rgba(255,255,255,.94); color:var(--txt2); backdrop-filter:blur(8px); box-shadow:var(--sh); }
+.fpill.on { color:#fff; }
+
+/* FAB + 줌 */
+.map-fab { position:absolute; right:16px; bottom:16px; z-index:20; width:58px; height:58px; border-radius:50%; background:linear-gradient(135deg,var(--brand-light),var(--brand2)); color:#fff; font-size:28px; box-shadow:0 6px 24px var(--brand-glow); display:flex; align-items:center; justify-content:center; }
+.map-fab:active { transform:scale(.9); }
+.map-zoom { position:absolute; right:16px; bottom:88px; z-index:10; display:flex; flex-direction:column; gap:5px; }
+.mzbtn { width:42px; height:42px; border-radius:11px; background:rgba(255,255,255,.95); backdrop-filter:blur(8px); border:1px solid var(--border); color:var(--brand); font-size:19px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+.mzbtn:active { background:var(--brand); color:#fff; }
+
+/* 힌트 */
+.cv-hint { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:5; pointer-events:none; text-align:center; padding:40px; }
+.cv-hint-ic { font-size:54px; margin-bottom:16px; opacity:.28; }
+.cv-hint h3 { font-family:var(--display); font-size:17px; font-weight:700; color:var(--txt2); margin-bottom:8px; letter-spacing:-.2px; }
+.cv-hint p  { font-size:12px; color:var(--txt3); line-height:1.8; }
+
+/* ─── 하단 탭 ───────────────────────────────────────────────── */
+.nav { display:flex; background:#fff; border-top:1px solid var(--border); flex-shrink:0; z-index:30; padding-bottom:env(safe-area-inset-bottom); }
+.nitem { flex:1; padding:10px 0 12px; text-align:center; color:var(--txt3); border-top:2px solid transparent; margin-top:-1px; min-height:52px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; transition:color .15s; }
+.nitem .nic { font-size:22px; display:block; line-height:1.2; }
+.nitem .nlb { font-size:10px; font-weight:700; letter-spacing:.3px; margin-top:2px; }
+.nitem.on { color:var(--brand); border-top-color:var(--brand); }
+
+/* ─── 서브 뷰 ───────────────────────────────────────────────── */
+.view { position:absolute; inset:0; background:var(--bg); z-index:25; display:flex; flex-direction:column; transform:translateX(105%); transition:transform .3s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+.view.show { transform:translateX(0); }
+.vhdr { display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:2px solid var(--brand); background:#fff; flex-shrink:0; min-height:52px; }
+.vhdr h2 { font-family:var(--display); font-size:17px; font-weight:700; flex:1; letter-spacing:-.2px; }
+.vbody { flex:1; overflow-y:auto; padding:12px 14px; -webkit-overflow-scrolling:touch; }
+.srch { display:flex; gap:8px; margin-bottom:12px; }
+.srch input { flex:1; padding:11px 14px; background:#fff; border:1.5px solid var(--border); border-radius:12px; outline:none; font-size:16px; -webkit-appearance:none; }
+.srch input:focus { border-color:var(--brand); }
+
+/* ─── 인맥 카드 ─────────────────────────────────────────────── */
+.pcard { display:flex; align-items:center; gap:12px; background:#fff; border:1px solid var(--border); border-radius:14px; padding:14px 15px; margin-bottom:10px; box-shadow:var(--sh); min-height:70px; cursor:pointer; }
+.pcard:active { border-color:var(--brand); box-shadow:0 2px 12px var(--brand-glow); }
+.pav { width:46px; height:46px; border-radius:13px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:18px; font-weight:900; color:#fff; }
+.pi  { flex:1; min-width:0; }
+.pn  { font-size:15px; font-weight:700; display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+.pbadge { font-size:10px; font-weight:700; padding:2px 7px; border-radius:8px; }
+.pm  { font-size:12px; color:var(--txt3); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.prc { text-align:right; flex-shrink:0; }
+.prc-n { font-family:var(--num); font-size:18px; font-weight:700; color:var(--brand); line-height:1; }
+.prc-l { font-size:9px; color:var(--brand2); font-weight:700; letter-spacing:.3px; margin-top:1px; }
+
+/* ─── 알림 카드 ─────────────────────────────────────────────── */
+.acard { background:#fff; border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:10px; box-shadow:var(--sh); border-left:3px solid var(--txt3); }
+.acard.urgent { border-left-color:var(--red); }
+.at { font-size:14px; font-weight:700; display:flex; align-items:center; gap:7px; margin-bottom:5px; }
+.ad { font-size:12px; color:var(--txt2); line-height:1.6; }
+.abtn-row { display:flex; gap:7px; margin-top:11px; }
+.abtn { flex:1; padding:10px 8px; border-radius:10px; font-size:13px; font-weight:700; text-align:center; min-height:44px; display:flex; align-items:center; justify-content:center; cursor:pointer; border:none; }
+.abtn.pri { background:var(--brand); color:#fff; }
+.abtn.sec { background:var(--brand-pale); color:var(--brand); }
+.sec-ttl { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--brand2); margin:6px 2px 10px; display:flex; align-items:center; gap:7px; }
+.sec-ttl::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* ─── 상세 패널 ─────────────────────────────────────────────── */
+.d-hero  { text-align:center; padding:4px 0 16px; }
+.d-av    { width:68px; height:68px; border-radius:20px; display:flex; align-items:center; justify-content:center; font-size:28px; font-weight:900; color:#fff; margin:0 auto 12px; }
+.d-name  { font-family:var(--display); font-size:20px; font-weight:700; color:var(--txt); letter-spacing:-.3px; }
+.d-sub   { font-size:13px; color:var(--txt3); margin-top:3px; }
+.d-chips { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
+.dchip   { font-size:11px; font-weight:700; padding:4px 12px; border-radius:20px; }
+.kv-box  { background:var(--brand-pale); border:1px solid var(--border); border-radius:13px; padding:4px 14px; margin:14px 0; }
+.kv      { display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:1px solid var(--border2); font-size:13px; gap:12px; }
+.kv:last-child { border:none; }
+.kv .k   { color:var(--brand2); font-weight:700; white-space:nowrap; flex-shrink:0; }
+.kv .v   { font-weight:600; text-align:right; color:var(--txt); }
+.script-box { background:linear-gradient(135deg,var(--brand-pale),#FFF8F4); border:1px solid rgba(232,90,0,.2); border-radius:14px; padding:14px 16px; margin:14px 0; }
+.sb-label   { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--brand); margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
+.sb-copy    { font-size:11px; font-weight:700; color:var(--brand); background:#fff; border:1px solid rgba(232,90,0,.3); border-radius:8px; padding:3px 10px; letter-spacing:0; text-transform:none; }
+.sb-copy:active { background:var(--brand); color:#fff; }
+.sb-text    { font-size:13px; line-height:1.8; color:var(--txt); }
+.comm-box   { background:linear-gradient(135deg,rgba(232,90,0,.06),rgba(204,79,0,.04)); border:1px solid rgba(232,90,0,.2); border-radius:14px; padding:14px 16px; margin:14px 0; }
+.comm-title { font-size:12px; font-weight:700; color:var(--brand); letter-spacing:.5px; text-transform:uppercase; margin-bottom:3px; }
+.comm-desc  { font-size:11px; color:var(--txt3); margin-bottom:11px; line-height:1.5; }
+.comm-grid  { display:grid; grid-template-columns:1fr 1fr; gap:7px; }
+.comm-btn   { display:flex; align-items:center; justify-content:center; gap:5px; padding:10px 8px; background:#fff; border-radius:10px; font-size:12px; font-weight:700; color:var(--brand); border:1px solid rgba(232,90,0,.15); }
+.comm-btn:active { background:var(--brand-pale); }
+.comm-note  { font-size:10px; color:var(--txt3); text-align:center; margin-top:8px; }
+
+/* ─── 잠금 화면 ─────────────────────────────────────────────── */
+#lockScreen { position:absolute; inset:0; z-index:200; background:linear-gradient(160deg,#FFF4EE,#FFEADC); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:40px; }
+#lockScreen.hide { display:none; }
+.lock-ic { font-size:48px; margin-bottom:16px; }
+.lock-t  { font-family:var(--display); font-size:20px; font-weight:700; color:var(--brand); margin-bottom:6px; letter-spacing:-.3px; }
+.lock-d  { font-size:13px; color:var(--txt2); margin-bottom:28px; text-align:center; line-height:1.6; }
+.pdots   { display:flex; gap:14px; margin-bottom:30px; }
+.pdot    { width:13px; height:13px; border-radius:50%; border:2px solid rgba(232,90,0,.3); transition:all .15s; }
+.pdot.on { background:var(--brand-light); border-color:var(--brand-light); box-shadow:0 0 8px var(--brand-glow); }
+.ppad    { display:grid; grid-template-columns:repeat(3,76px); gap:14px; }
+.pk      { width:76px; height:76px; border-radius:50%; background:#fff; border:1.5px solid var(--border); color:var(--txt); font-size:26px; font-weight:600; display:flex; align-items:center; justify-content:center; box-shadow:var(--sh); font-family:var(--display); cursor:pointer; }
+.pk:active { background:var(--brand); border-color:var(--brand); color:#fff; }
+.pk.fn { background:transparent; border-color:transparent; font-size:14px; font-weight:700; color:var(--brand); box-shadow:none; }
+</style>
 </head>
 <body>
-
 <div id="app">
 
-  <!-- ── 잠금 화면 ── -->
-  <div id="lockScreen" class="lock-screen" style="display:none">
+  <!-- 잠금 화면 -->
+  <div id="lockScreen" class="hide">
     <div class="lock-ic">🔐</div>
     <div class="lock-t" id="lockT">잠금 해제</div>
     <div class="lock-d" id="lockD">4자리 비밀번호를 입력하세요</div>
@@ -27,153 +174,178 @@
     <div class="ppad"  id="ppad"></div>
   </div>
 
-  <!-- ── 헤더 (항상 고정) ── -->
+  <!-- 헤더 -->
   <div class="hdr">
     <div class="logo"><div class="logo-mark">🔗</div>LinkMap</div>
     <div class="hdr-right">
       <button class="hbtn" id="btnPush"    title="푸시 알림 설정">🔔</button>
-      <button class="hbtn" id="btnExport"  title="백업">⬇</button>
-      <button class="hbtn" id="btnImport"  title="복원">⬆</button>
+      <button class="hbtn" id="btnExport" title="백업">⬇</button>
+      <button class="hbtn" id="btnImport" title="복원">⬆</button>
       <button class="hbtn" id="btnSetting" title="설정">⚙</button>
     </div>
   </div>
   <input type="file" id="fileIn" accept=".json" style="display:none">
 
-  <!-- ── 통계 바 (항상 고정) ── -->
-  <div class="stats" id="statsBar">
-    <div class="stat-card" style="--acc:var(--brand)">
-      <div class="stat-val" id="stTotal">0</div><div class="stat-lbl">전체 인맥</div>
+  <!-- 통계 바 -->
+  <div class="stats">
+    <div class="stat-card" style="--acc:var(--brand)">   <div class="stat-val" id="stTotal">0</div><div class="stat-lbl">전체 인맥</div></div>
+    <div class="stat-card" style="--acc:var(--blue)">    <div class="stat-val" id="stEdge">0</div> <div class="stat-lbl">소개 연결</div></div>
+    <div class="stat-card" style="--acc:var(--green)" id="stRateCard" title="고객 중 1명 이상 소개한 비율">
+      <div class="stat-val" id="stRate" style="font-size:13px">—</div>
+      <div class="stat-lbl">소개 성공률</div>
     </div>
-    <div class="stat-card" style="--acc:var(--blue)">
-      <div class="stat-val" id="stEdge">0</div><div class="stat-lbl">소개 연결</div>
-    </div>
-    <div class="stat-card" style="--acc:var(--green)" id="stRateCard">
-      <div class="stat-val" id="stRate" style="font-size:13px">—</div><div class="stat-lbl">소개 성공률</div>
-    </div>
-    <div class="stat-card" style="--acc:var(--red)">
-      <div class="stat-val" id="stAlert">0</div><div class="stat-lbl">연락 알림</div>
+    <div class="stat-card" style="--acc:var(--red)">     <div class="stat-val" id="stAlert">0</div><div class="stat-lbl">연락 알림</div></div>
+  </div>
+
+  <!-- 캔버스 -->
+  <!-- 오늘 할 일 대시보드 -->
+  <div id="todayDash" style="display:none"></div>
+
+  <!-- 연결망 + 온보딩 오버레이 -->
+  <div id="onboardOverlay" class="onboard-overlay" style="display:none">
+    <div class="onboard-card">
+      <div class="onboard-ic">🔗</div>
+      <h3>LinkMap에 오신 것을 환영합니다!</h3>
+      <p>소개 영업 관리를 시작해 보세요<br>먼저 고객을 등록하거나<br>샘플로 둘러볼 수 있습니다</p>
+      <button class="btn btn-primary" onclick="startWithSample()" style="margin-bottom:10px">✨ 샘플로 먼저 둘러보기</button>
+      <button class="btn btn-ghost" onclick="closeOnboard()">+ 직접 고객 추가하기</button>
     </div>
   </div>
 
-  <!-- ── 중간 콘텐츠 영역 (flex:1 → 남는 공간 전부) ── -->
-  <div id="mainArea">
+  <div class="map-wrap" id="mapWrap">
+    <canvas id="cvs"></canvas>
 
-    <!-- 오늘 할 일 (탭 전환으로 show/hide) -->
-    <div id="vToday" class="main-panel" style="display:none">
-      <div id="todayDash"></div>
+    <div class="filter-pills" id="filterBar">
+      <div class="fpill on" data-f="all"      style="background:var(--brand);color:#fff;border-color:var(--brand)">전체</div>
+      <div class="fpill" data-f="customer">고객</div>
+      <div class="fpill" data-f="friend">지인</div>
+      <div class="fpill" data-f="prospect">신규</div>
     </div>
 
-    <!-- 연결망 (기본 표시) -->
-    <div id="vMap" class="main-panel">
-      <div id="onboardOverlay" class="onboard-overlay" style="display:none">
-        <div class="onboard-card">
-          <div class="onboard-ic">🔗</div>
-          <h3>LinkMap에 오신 것을 환영합니다!</h3>
-          <p>소개 영업 관리를 시작해 보세요<br>먼저 고객을 등록하거나<br>샘플로 둘러볼 수 있습니다</p>
-          <button class="btn btn-primary" onclick="startWithSample()" style="margin-bottom:10px">✨ 샘플로 먼저 둘러보기</button>
-          <button class="btn btn-ghost"   onclick="closeOnboard()">+ 직접 고객 추가하기</button>
-        </div>
-      </div>
+    <div class="map-legend">
+      <div class="lg-row"><span class="lg-dot" style="background:var(--c-customer)"></span>기존 고객</div>
+      <div class="lg-row"><span class="lg-dot" style="background:var(--c-friend)"></span>지인</div>
+      <div class="lg-row"><span class="lg-dot" style="background:var(--c-prospect)"></span>신규 고객</div>
+      <div class="lg-sep"></div>
+      <div class="lg-row" style="font-size:10px">⭐ 소개 허브</div>
+    </div>
 
-      <div class="map-wrap" id="mapWrap">
-        <canvas id="cvs"></canvas>
+    <div class="map-zoom">
+      <button class="mzbtn" id="btnZoomIn">+</button>
+      <button class="mzbtn" id="btnZoomOut">−</button>
+      <button class="mzbtn" id="btnZoomReset" style="font-size:13px">⌂</button>
+    </div>
 
-        <div class="filter-pills" id="filterBar">
-          <div class="fpill on" data-f="all" style="background:var(--brand);color:#fff;border-color:var(--brand)">전체</div>
-          <div class="fpill" data-f="customer">고객</div>
-          <div class="fpill" data-f="friend">지인</div>
-          <div class="fpill" data-f="prospect">신규</div>
-        </div>
+    <button class="map-fab" id="fabAdd">＋</button>
+    <div id="tip"></div>
 
-        <div class="map-legend">
-          <div class="lg-row"><span class="lg-dot" style="background:var(--c-customer)"></span>기존 고객</div>
-          <div class="lg-row"><span class="lg-dot" style="background:var(--c-friend)"></span>지인</div>
-          <div class="lg-row"><span class="lg-dot" style="background:var(--c-prospect)"></span>신규 고객</div>
-          <div class="lg-sep"></div>
-          <div class="lg-row" style="font-size:10px">⭐ 소개 허브</div>
-        </div>
+    <div class="cv-hint" id="cvHint">
+      <div class="cv-hint-ic">🔗</div>
+      <h3>나의 소개 연결망을 만들어 보세요</h3>
+      <p>아래 <b>＋</b> 버튼으로 고객·지인을 추가하고<br>누가 누구를 소개했는지 연결하면<br>나만의 관계망이 그려집니다</p>
+    </div>
+  </div>
 
-        <div class="map-zoom">
-          <button class="mzbtn" id="btnZoomIn">+</button>
-          <button class="mzbtn" id="btnZoomOut">−</button>
-          <button class="mzbtn" id="btnZoomReset" style="font-size:13px">⌂</button>
-        </div>
-
-        <button class="map-fab" id="fabAdd">＋</button>
-        <div id="tip"></div>
-
-        <div class="cv-hint" id="cvHint">
-          <div class="cv-hint-ic">🔗</div>
-          <h3>나의 소개 연결망을 만들어 보세요</h3>
-          <p>아래 <b>＋</b> 버튼으로 고객·지인을 추가하고<br>누가 누구를 소개했는지 연결하면<br>나만의 관계망이 그려집니다</p>
-        </div>
-      </div><!-- /mapWrap -->
-    </div><!-- /vMap -->
-
-  </div><!-- /mainArea -->
-
-  <!-- ── 하단 탭 (항상 고정) ── -->
-  <nav class="nav">
-    <div class="nitem" data-v="today">   <span class="nic">🏠</span><span class="nlb">오늘 할 일</span></div>
-    <div class="nitem on" data-v="map">  <span class="nic">🔗</span><span class="nlb">연결망</span></div>
-    <div class="nitem" data-v="list">    <span class="nic">👥</span><span class="nlb">인맥 목록</span></div>
-    <div class="nitem" data-v="cal">     <span class="nic">📅</span><span class="nlb">일정</span></div>
-    <div class="nitem" data-v="alerts">  <span class="nic">🔔</span><span class="nlb">알림</span></div>
-  </nav>
-
-  <!-- ── 오버레이 서브 뷰 (인맥목록 / 일정 / 알림) ── -->
+  <!-- 인맥 목록 뷰 -->
   <div class="view" id="vList">
     <div class="vhdr">
       <button class="icon-btn" onclick="closeView()">←</button>
       <h2>인맥 목록</h2>
     </div>
-    <div class="srch">
-      <input id="srchInput" type="search" placeholder="이름·지역 검색">
+    <div class="vbody">
+      <div class="srch"><input id="srchInput" type="text" placeholder="이름 또는 지역 검색"></div>
+      <div id="plist"></div>
     </div>
-    <div class="vbody" id="plist"></div>
   </div>
 
+
+  <!-- 달력 일정 뷰 -->
   <div class="view" id="vCal">
     <div class="vhdr">
       <button class="icon-btn" onclick="closeView()">←</button>
       <h2>일정 관리</h2>
+      <button class="icon-btn" id="btnAddSched" title="일정 추가">＋</button>
     </div>
-    <div class="vbody">
+    <div class="vbody" id="calBody">
+      <!-- 달력 헤더 -->
       <div class="cal-nav">
         <button class="cal-arrow" id="calPrev">‹</button>
-        <span  class="cal-title" id="calTitle"></span>
+        <span class="cal-month" id="calMonthLabel"></span>
         <button class="cal-arrow" id="calNext">›</button>
       </div>
+      <!-- 요일 헤더 -->
+      <div class="cal-dow">
+        <span style="color:var(--red)">일</span><span>월</span><span>화</span>
+        <span>수</span><span>목</span><span>금</span>
+        <span style="color:var(--blue)">토</span>
+      </div>
+      <!-- 날짜 그리드 -->
       <div class="cal-grid" id="calGrid"></div>
-      <div class="cal-events" id="calEvents"></div>
+      <!-- 선택 날짜 일정 목록 -->
+      <div class="cal-day-header" id="calDayHeader"></div>
+      <div id="calSchedList"></div>
     </div>
   </div>
 
+  <!-- 연락 알림 뷰 -->
   <div class="view" id="vAlert">
     <div class="vhdr">
       <button class="icon-btn" onclick="closeView()">←</button>
       <h2>연락 알림</h2>
-      <div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-        <span style="font-size:11px;color:var(--txt3)">기준일</span>
-        <input id="thrInput" type="number" min="1" max="365" style="width:52px;padding:4px 7px;border-radius:8px;border:1.5px solid var(--border);font-size:13px;text-align:center">
-        <span style="font-size:11px;color:var(--txt3)">일</span>
+    </div>
+    <!-- 알림 기준일 필터 -->
+    <div class="alert-filter-wrap">
+      <div class="alert-filter-label">연락 기준 : 마지막 접촉 후</div>
+      <div class="alert-filter-row" id="alertFilterRow">
+        <button class="af-btn on" data-d="10">10일</button>
+        <button class="af-btn"    data-d="15">15일</button>
+        <button class="af-btn"    data-d="30">30일</button>
+        <button class="af-btn"    data-d="custom">직접입력</button>
+      </div>
+      <div class="af-custom-wrap hide" id="afCustomWrap">
+        <input id="afCustomInput" type="number" min="1" max="999" placeholder="일 수 입력" inputmode="numeric">
+        <button class="af-apply" id="afApply">적용</button>
       </div>
     </div>
-    <div class="sort-hint">⭐ 소개를 많이 해준 고객을 우선으로 정렬했습니다</div>
     <div class="vbody" id="alertBody" style="padding-top:6px"></div>
   </div>
 
+  <!-- 하단 탭 -->
+  <nav class="nav">
+    <div class="nitem on" data-v="map">    <span class="nic">🔗</span><span class="nlb">연결망</span></div>
+    <div class="nitem"    data-v="list">   <span class="nic">👥</span><span class="nlb">인맥 목록</span></div>
+    <div class="nitem"    data-v="cal">    <span class="nic">📅</span><span class="nlb">일정</span></div>
+    <div class="nitem"    data-v="alerts"> <span class="nic">🔔</span><span class="nlb">알림</span></div>
+  </nav>
+
 </div><!-- #app -->
 
-<!-- ── 오버레이들 ── -->
-<div id="overlay"   class="overlay" style="display:none"></div>
-<div id="detSheet"  class="sheet"   style="display:none">
+<!-- 오버레이 -->
+<div id="overlay"></div>
+
+<!-- 백업 형식 선택 시트 -->
+<div class="sheet" id="shExport">
   <div class="sheet-handle"></div>
   <div class="sheet-head">
-    <h3 id="detTitle">상세 정보</h3>
+    <h3>백업 파일 형식 선택</h3>
     <button class="icon-btn" onclick="closeSheet()">✕</button>
   </div>
-  <div class="sheet-body" id="detBody"></div>
+  <div class="sheet-body">
+    <p style="font-size:13px;color:var(--txt3);margin-bottom:18px;line-height:1.7">
+      인맥 데이터를 원하는 형식으로 저장합니다.<br>
+      Excel은 PC에서 열람·편집이 가능하고,<br>
+      PDF는 인쇄·공유에 적합합니다.
+    </p>
+    <button class="btn btn-primary" id="btnExportExcel">
+      <span>📊</span> Excel 파일로 저장 (.xls)
+    </button>
+    <button class="btn btn-ghost" id="btnExportPdf">
+      <span>📄</span> PDF 파일로 저장
+    </button>
+    <button class="btn btn-ghost" id="btnExportJson">
+      <span>💾</span> JSON 백업 파일로 저장 (복원용)
+    </button>
+  </div>
 </div>
 
 <!-- 인맥 추가/수정 시트 -->
@@ -184,115 +356,58 @@
     <button class="icon-btn" onclick="closeSheet()">✕</button>
   </div>
   <div class="sheet-body">
-    <div id="formStep1">
-      <div class="step-badge">1단계 · 필수 정보</div>
-      <div class="field">
-        <label>관계 유형 *</label>
-        <div class="rel-row" id="relRow">
-          <div class="rel-opt" data-r="customer">기존 고객</div>
-          <div class="rel-opt" data-r="friend">지인</div>
-          <div class="rel-opt" data-r="prospect">신규 고객</div>
-        </div>
+    <div class="field">
+      <label>관계 유형 *</label>
+      <div class="rel-row" id="relRow">
+        <div class="rel-opt" data-r="customer">기존 고객</div>
+        <div class="rel-opt" data-r="friend">지인</div>
+        <div class="rel-opt" data-r="prospect">신규 고객</div>
       </div>
-      <div class="field">
-        <label>이름 / 별칭 *</label>
-        <input id="fName" type="text" placeholder="예: 김OO  또는  헬스장 형">
-        <div class="hint">실명 대신 별칭 사용을 권장합니다</div>
-      </div>
-      <div class="field">
-        <label>활동 지역</label>
-        <input id="fRegion" type="text" placeholder="예: 성남시 분당구">
-        <div class="hint">입력하면 커뮤니티 검색 기능이 활성화됩니다</div>
-      </div>
-      <button class="btn btn-primary" id="btnStep2">다음 →  상세 정보 입력</button>
-      <button class="btn btn-ghost"   id="btnSaveQuick" style="margin-top:8px">이것만 저장하기</button>
     </div>
-    <div id="formStep2" style="display:none">
-      <div class="step-badge step-badge-2">2단계 · 상세 정보 (선택)</div>
-      <div class="step-summary" id="formSummary"></div>
-      <div class="field">
-        <label>소개해 준 사람</label>
-        <select id="fRef"><option value="">— 직접 알게 됨 —</option></select>
-        <div class="hint">선택하면 연결망에 화살표가 자동 생성됩니다</div>
-      </div>
-      <div class="field">
-        <label>최근 접촉일</label>
-        <input id="fDate" type="date">
-        <div class="hint">입력하면 연락 알림을 받을 수 있습니다</div>
-      </div>
-      <div class="field">
-        <label>메모</label>
-        <textarea id="fMemo" placeholder="예: 자녀 2명, 자영업"></textarea>
-        <div class="hint-warn">⚠ 주민번호·연락처·계약금액 등 민감정보는 입력하지 마세요</div>
-      </div>
-      <button class="btn btn-primary" id="btnSave">저장하기</button>
-      <button class="btn btn-ghost" id="btnBackStep1" style="margin-top:8px">← 이전으로</button>
-    </div>
+    <div class="field"><label>이름 / 별칭 *</label><input id="fName" type="text" placeholder="예: 김OO  또는  헬스장 형"><div class="hint">별칭 사용을 권장합니다</div></div>
+    <div class="field"><label>활동 지역</label><input id="fRegion" type="text" placeholder="예: 성남시 분당구"><div class="hint">입력하면 커뮤니티 검색 기능이 활성화됩니다</div></div>
+    <div class="field"><label>소개해 준 사람</label><select id="fRef"><option value="">— 직접 알게 됨 —</option></select><div class="hint">선택하면 연결선이 자동 생성됩니다</div></div>
+    <div class="field"><label>최근 접촉일</label><input id="fDate" type="date"></div>
+    <div class="field"><label>메모</label><textarea id="fMemo" placeholder="예: 자녀 2명, 자영업"></textarea><div class="hint-warn">⚠ 주민번호·연락처·계약금액 등 민감정보는 입력하지 마세요</div></div>
+    <button class="btn btn-primary" id="btnSave">저장하기</button>
   </div>
 </div>
 
-<!-- 일정 추가/수정 시트 -->
-<div class="sheet" id="shCal">
+<!-- 상세 시트 -->
+<div class="sheet" id="shDetail">
   <div class="sheet-handle"></div>
   <div class="sheet-head">
-    <h3 id="calFormTitle">일정 추가</h3>
+    <h3>상세 정보</h3>
+    <button class="icon-btn" onclick="closeSheet()">✕</button>
+  </div>
+  <div class="sheet-body" id="detBody"></div>
+</div>
+
+
+<!-- 일정 추가/수정 시트 -->
+<div class="sheet" id="shSched">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3 id="schedTitle">일정 추가</h3>
     <button class="icon-btn" onclick="closeSheet()">✕</button>
   </div>
   <div class="sheet-body">
-    <div class="field"><label>날짜 *</label><input id="cDate" type="date"></div>
-    <div class="field"><label>시간</label><input id="cTime" type="time"></div>
-    <div class="field"><label>제목 *</label><input id="cTitle" type="text" placeholder="예: 김OO님 미팅"></div>
+    <div class="field"><label>날짜 *</label><input id="sDate" type="date"></div>
+    <div class="field"><label>시간</label><input id="sTime" type="time" placeholder="예: 14:00"></div>
+    <div class="field"><label>제목 *</label><input id="sTitle" type="text" placeholder="예: 이O수님 미팅"></div>
     <div class="field">
-      <label>관련 인맥</label>
-      <select id="cPerson"><option value="">— 없음 —</option></select>
+      <label>관련 인맥 (선택)</label>
+      <select id="sPerson"><option value="">— 선택 안 함 —</option></select>
     </div>
-    <div class="field"><label>메모</label><textarea id="cMemo" placeholder="미팅 장소, 안건 등"></textarea></div>
-    <button class="btn btn-primary" id="btnCalSave">저장</button>
-    <button class="btn btn-danger" id="btnCalDel" style="display:none;margin-top:0">삭제</button>
-  </div>
-</div>
-
-<!-- 백업 확인 모달 -->
-<div id="exportModal" class="modal" style="display:none">
-  <div class="modal-card">
-    <div class="modal-title">⚠ 백업 전 주의사항</div>
-    <div class="modal-body">백업 파일에는 등록된 모든 고객 정보가 포함됩니다.<br>안전한 장소에 보관하시고 타인과 공유하지 마세요.</div>
-    <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="closeModal()" style="margin-bottom:0">취소</button>
-      <button class="btn btn-primary" id="btnExportOk" style="margin-bottom:0">확인, 백업하기</button>
-    </div>
-  </div>
-</div>
-<div id="memoModal" class="modal" style="display:none">
-  <div class="modal-card">
-    <div class="modal-title">메모 포함 여부</div>
-    <div class="modal-body">메모에 민감한 내용이 있을 수 있습니다.<br>백업 파일에 메모를 포함하시겠습니까?</div>
-    <div class="modal-btns">
-      <button class="btn btn-ghost" id="btnMemoNo"  style="margin-bottom:0">메모 제외</button>
-      <button class="btn btn-primary" id="btnMemoYes" style="margin-bottom:0">포함하기</button>
-    </div>
-  </div>
-</div>
-
-<!-- 설정 시트 -->
-<div class="sheet" id="shSetting">
-  <div class="sheet-handle"></div>
-  <div class="sheet-head"><h3>설정</h3><button class="icon-btn" onclick="closeSheet()">✕</button></div>
-  <div class="sheet-body">
-    <div class="field">
-      <label>PIN 잠금</label>
-      <button class="btn btn-ghost" id="btnPinToggle" style="margin-bottom:0"></button>
-    </div>
-    <div class="field" id="pinChangeArea" style="display:none">
-      <label>PIN 변경</label>
-      <button class="btn btn-ghost" id="btnPinChange" style="margin-bottom:0">PIN 변경하기</button>
-    </div>
+    <div class="field"><label>메모</label><textarea id="sMemo" placeholder="장소, 안건 등 메모"></textarea></div>
+    <div class="hint-warn">⚠ 주민번호·연락처·계약금액 등 민감정보는 입력하지 마세요</div>
+    <button class="btn btn-primary" id="btnSchedSave">저장하기</button>
   </div>
 </div>
 
 <!-- 토스트 -->
-<div id="toast" class="toast" style="display:none"></div>
+<div id="toast"></div>
 
-<script src="app.js?v=202606210604"></script>
+<script src="app.js?v=20260619"></script>
 </body>
 </html>

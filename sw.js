@@ -1,9 +1,10 @@
 /* ════════════════════════════════════════════════════════════
-   LinkMap — Service Worker  v202606210604
+   LinkMap — Service Worker  v2.0  (2026-06-19)
    - 웹 푸시 알림 수신 및 클릭 처리
    - 정적 파일 캐싱 (오프라인 지원)
+   - v2: 캐시 버전 갱신 — 이전 캐시 완전 파기
 ════════════════════════════════════════════════════════════ */
-const CACHE_NAME = 'linkmap-v202606210604';
+const CACHE_NAME = 'linkmap-v2';
 const ASSETS = [
   './',
   './app.html',
@@ -31,11 +32,8 @@ self.addEventListener('activate', e => {
   );
 });
 
-/* ── Fetch: 동일 origin 요청만 처리 (외부 리소스 캐싱 차단) ─── */
+/* ── Fetch: 캐시 우선, 없으면 네트워크 ─── */
 self.addEventListener('fetch', e => {
-  const url = new URL(e.request.url);
-  /* 동일 origin 아니면 무시 — 외부 API 요청은 SW 거치지 않음 */
-  if (url.origin !== self.location.origin) return;
   if (e.request.method !== 'GET') return;
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
