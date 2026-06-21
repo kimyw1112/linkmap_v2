@@ -324,7 +324,19 @@ let ST={ filt:'all', selId:null, editId:null, relPick:'customer', zoom:1, ox:0, 
 function resize(){
   const wrap=document.getElementById('mapWrap');
   DPR=window.devicePixelRatio||1;
-  W=wrap.clientWidth; H=wrap.clientHeight;
+  /* mapWrap이 숨겨져 있으면 clientWidth가 0 — 부모(main-container)로 대체 */
+  let ww = wrap.clientWidth, wh = wrap.clientHeight;
+  if(ww === 0 || wh === 0){
+    const mc = document.getElementById('app');
+    ww = mc ? mc.clientWidth  : window.innerWidth;
+    wh = mc ? mc.clientHeight : window.innerHeight;
+    /* 헤더·탭 높이 빼기 */
+    const hdr = document.querySelector('.hdr');
+    const nav = document.querySelector('.nav');
+    wh -= (hdr ? hdr.offsetHeight : 52) + (nav ? nav.offsetHeight : 56);
+    wh = Math.max(wh, 200);
+  }
+  W = ww; H = wh;
   cvs.width=W*DPR; cvs.height=H*DPR;
   cvs.style.width=W+'px'; cvs.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
@@ -484,7 +496,13 @@ function _clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
 /* 연결망 전체 재배치 (노드 추가/삭제 후 호출) */
 function relayout(){
   Object.keys(POS).forEach(k => delete POS[k]);
-  initPos();
+  /* 연결망 뷰가 보이는 상태면 즉시 배치, 숨겨져 있으면 플래그만 세움 */
+  const mapVisible = document.getElementById('vMap').classList.contains('show');
+  if(mapVisible){
+    resize();   /* 최신 크기 반영 */
+    initPos();
+  }
+  /* mapVisible이 false면 showMainView('vMap') 호출 시 initPos가 실행됨 */
 }
 
 function draw(){
@@ -830,6 +848,176 @@ document.getElementById('btnSave').addEventListener('click',()=>{
 });
 
 /* ═══ 상세 보기 ══════════════════════════════════════════════════ */
+/* ═══ 지역 커뮤니티 접점 탐색 v2 ══════════════════════════════
+   고객 데이터(직업 추정, 소개 경로, 지역)를 바탕으로
+   실제 접근 가능한 커뮤니티 유형을 자동 추론하고,
+   오프라인 거점 + 접근 문자 초안까지 제공
+════════════════════════════════════════════════════════════════ */
+
+/* 검색 URL 헬퍼 */
+const urlNaverCafe  = (r,kw) => `https://cafe.naver.com/ArticleSearchList.nhn?search.query=${encodeURIComponent(r+' '+kw)}&search.sortBy=date`;
+const urlKakaoMap   = (r,kw) => `https://map.kakao.com/?q=${encodeURIComponent(r+' '+kw)}`;
+const urlBand       = (r,kw) => `https://band.us/search?q=${encodeURIComponent(r+' '+kw)}`;
+const urlDaangn     = (r,kw) => `https://www.daangn.com/search?q=${encodeURIComponent(r+' '+kw)}`;
+const urlNaverPlace = (r,kw) => `https://map.naver.com/p/search/${encodeURIComponent(r+' '+kw)}`;
+
+/* 커뮤니티 유형 정의 */
+const COMM_TYPES = [
+  {
+    id:'momcafe', ic:'👶', label:'맘카페·학부모',
+    /* 메모나 소개 경로에 자녀 관련 단서가 있으면 우선 추천 */
+    priority: (p) => /자녀|아이|아들|딸|학부모|육아|어린이|초등|중학|고등/i.test(p.memo||'') ? 2 : 0,
+    channels:[
+      { name:'네이버 카페',    url:(r)=>urlNaverCafe(r,'맘카페'),     ic:'☕', type:'온라인' },
+      { name:'밴드',           url:(r)=>urlBand(r,'엄마 모임'),       ic:'🎗', type:'온라인' },
+      { name:'당근 동네생활',  url:(r)=>urlDaangn(r,'엄마 모임'),     ic:'🥕', type:'온라인' },
+    ],
+    offline:{ label:'키즈카페·문화센터', url:(r)=>urlKakaoMap(r,'키즈카페') },
+    script:(r,name)=>`안녕하세요 ${name}님! 혹시 ${r} 지역 맘카페나 학부모 모임 활동하세요? 자녀 교육이나 건강 보장 관련 정보 나누는 모임 있으면 저도 참여하고 싶어서요 😊 혹시 소개받을 수 있을까요?`,
+  },
+  {
+    id:'health', ic:'💪', label:'헬스장·운동 모임',
+    priority: (p) => /운동|헬스|테니스|골프|등산|러닝|배드민턴|수영|필라테스|요가/i.test(p.memo||'') ? 2 : 0,
+    channels:[
+      { name:'네이버 플레이스', url:(r)=>urlNaverPlace(r,'헬스장'),   ic:'📍', type:'오프라인' },
+      { name:'당근 동네생활',   url:(r)=>urlDaangn(r,'운동 모임'),    ic:'🥕', type:'온라인' },
+      { name:'밴드',            url:(r)=>urlBand(r,'운동 동호회'),    ic:'🎗', type:'온라인' },
+    ],
+    offline:{ label:'헬스장·체육관 찾기', url:(r)=>urlKakaoMap(r,'헬스장') },
+    script:(r,name)=>`${name}님, 요즘 운동 열심히 하시죠? 저도 ${r}에서 운동 모임 함께하고 싶은데요. 혹시 다니시는 헬스장이나 운동 동호회 있으시면 한번 소개해 주실 수 있을까요?`,
+  },
+  {
+    id:'local', ic:'🏘', label:'주민·동네 모임',
+    priority: (p) => 1, /* 지역 기반이면 항상 기본 추천 */
+    channels:[
+      { name:'당근 동네생활',  url:(r)=>urlDaangn(r,'동네 모임'),    ic:'🥕', type:'온라인' },
+      { name:'네이버 카페',    url:(r)=>urlNaverCafe(r,'주민 모임'),  ic:'☕', type:'온라인' },
+      { name:'밴드',           url:(r)=>urlBand(r,'주민 자치'),       ic:'🎗', type:'온라인' },
+    ],
+    offline:{ label:'주민센터·복지관 찾기', url:(r)=>urlKakaoMap(r,'주민센터') },
+    script:(r,name)=>`안녕하세요 ${name}님! ${r} 지역에서 주민 모임이나 동네 커뮤니티 활동하세요? 저도 지역 분들과 교류를 넓히고 싶은데, 혹시 아시는 모임 있으시면 소개 부탁드려도 될까요?`,
+  },
+  {
+    id:'hobby', ic:'🎯', label:'취미·동호회',
+    priority: (p) => /독서|영화|사진|음악|요리|낚시|캠핑|보드|게임|등산/i.test(p.memo||'') ? 2 : 0,
+    channels:[
+      { name:'네이버 카페',  url:(r)=>urlNaverCafe(r,'동호회'),   ic:'☕', type:'온라인' },
+      { name:'밴드',         url:(r)=>urlBand(r,'취미 동호회'),   ic:'🎗', type:'온라인' },
+      { name:'당근 동네생활',url:(r)=>urlDaangn(r,'취미 모임'),   ic:'🥕', type:'온라인' },
+    ],
+    offline:{ label:'문화센터·강좌 찾기', url:(r)=>urlKakaoMap(r,'문화센터') },
+    script:(r,name)=>`${name}님, 취미 활동 즐겨 하세요? 저도 ${r} 지역 동호회나 취미 모임에 관심이 있어서요. 혹시 활동하시는 모임 있으시면 한번 소개해 주시겠어요?`,
+  },
+  {
+    id:'work', ic:'🏢', label:'직장인·비즈니스',
+    priority: (p) => /자영업|사업|직장|회사|대표|사장|부장|팀장|임원|CEO/i.test(p.memo||'') ? 2 : 0,
+    channels:[
+      { name:'네이버 카페',    url:(r)=>urlNaverCafe(r,'직장인 모임'), ic:'☕', type:'온라인' },
+      { name:'밴드',           url:(r)=>urlBand(r,'비즈니스 네트워크'),ic:'🎗', type:'온라인' },
+      { name:'네이버 플레이스',url:(r)=>urlNaverPlace(r,'공유오피스'), ic:'📍', type:'오프라인' },
+    ],
+    offline:{ label:'공유오피스·비즈니스센터', url:(r)=>urlKakaoMap(r,'공유오피스') },
+    script:(r,name)=>`안녕하세요 ${name}님! ${r} 지역에서 비즈니스 네트워크 모임 혹시 참여하고 계신가요? 직장인이나 자영업자 분들과 교류하는 모임이 있다면 소개해 주시면 정말 감사하겠습니다.`,
+  },
+  {
+    id:'senior', ic:'👴', label:'시니어·실버 모임',
+    priority: (p) => /부모님|어머니|아버지|어르신|시니어|은퇴|노후/i.test(p.memo||'') ? 2 : 0,
+    channels:[
+      { name:'네이버 카페',    url:(r)=>urlNaverCafe(r,'시니어 모임'), ic:'☕', type:'온라인' },
+      { name:'당근 동네생활',  url:(r)=>urlDaangn(r,'경로당 모임'),    ic:'🥕', type:'온라인' },
+      { name:'네이버 플레이스',url:(r)=>urlNaverPlace(r,'복지관'),      ic:'📍', type:'오프라인' },
+    ],
+    offline:{ label:'복지관·경로당 찾기', url:(r)=>urlKakaoMap(r,'복지관') },
+    script:(r,name)=>`${name}님, ${r} 지역 어르신들 모임이나 복지관 프로그램 같은 것 혹시 아세요? 노후 준비에 관심 있으신 분들께 도움이 될 정보를 나눠드리고 싶어서요.`,
+  },
+];
+
+/* 고객 맥락 기반 커뮤니티 유형 우선순위 정렬 */
+function rankCommTypes(p){
+  return [...COMM_TYPES]
+    .map(t => ({ ...t, score: t.priority(p) }))
+    .sort((a,b) => b.score - a.score);
+}
+
+/* 커뮤니티 섹션 렌더링 */
+function renderCommHTML(p){
+  if(!p.region){
+    return `<div class="comm-box">
+      <div class="comm-empty">📍 활동 지역을 입력하면<br>지역 커뮤니티 접점을 제안해드립니다</div>
+    </div>`;
+  }
+
+  const ranked = rankCommTypes(p);
+  const topType = ranked[0]; // 가장 유력한 유형
+
+  const typeCards = ranked.map((t,i) => `
+    <div class="comm-type-card${i===0?' comm-type-top':''}" onclick="toggleCommDetail('${t.id}_${p.id}')">
+      <div class="comm-type-hdr">
+        <span class="comm-type-ic">${t.ic}</span>
+        <span class="comm-type-label">${t.label}</span>
+        ${i===0&&t.score>=2?'<span class="comm-rec-badge">추천</span>':''}
+        <span class="comm-type-arr" id="comm-arr-${t.id}_${p.id}">›</span>
+      </div>
+      <div class="comm-type-body hide" id="comm-detail-${t.id}_${p.id}">
+        <!-- 오프라인 거점 -->
+        <a class="comm-offline-btn" href="${t.offline.url(p.region)}" target="_blank" rel="noopener">
+          📍 ${t.offline.label} (카카오맵)
+        </a>
+        <!-- 온라인 채널 -->
+        <div class="comm-channels">
+          ${t.channels.map(ch=>`<a class="comm-ch-btn" href="${ch.url(p.region)}" target="_blank" rel="noopener">${ch.ic} ${ch.name}</a>`).join('')}
+        </div>
+        <!-- 접근 문자 초안 -->
+        <div class="comm-script-wrap">
+          <div class="comm-script-label">💬 접근 문자 초안</div>
+          <div class="comm-script-text">${esc(t.script(p.region, p.name))}</div>
+          <button class="comm-script-copy" onclick="copyCommScript('${t.id}',${p.id});event.stopPropagation()">📋 복사</button>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  /* 메모 단서가 있으면 추론 근거 표시 */
+  const hint = topType.score >= 2
+    ? `<div class="comm-infer-hint">💡 메모 내용을 바탕으로 <b>${topType.label}</b>을 우선 추천합니다</div>`
+    : '';
+
+  return `<div class="comm-box-v2">
+    <div class="comm-v2-title">🗺 ${esc(p.region)} 지역 커뮤니티 접점</div>
+    ${hint}
+    <div class="comm-v2-desc">채널을 열면 오프라인 거점·온라인 커뮤니티·문자 초안이 나옵니다</div>
+    ${typeCards}
+    <div class="comm-note">외부 서비스로 이동 · 개인정보 미전송</div>
+  </div>`;
+}
+
+function toggleCommDetail(uid){
+  const body = document.getElementById('comm-detail-'+uid);
+  const arr  = document.getElementById('comm-arr-'+uid);
+  if(!body) return;
+  const isOpen = !body.classList.contains('hide');
+  /* 다른 것 닫기 */
+  document.querySelectorAll('.comm-type-body').forEach(el=>{
+    el.classList.add('hide');
+  });
+  document.querySelectorAll('.comm-type-arr').forEach(el=>{ el.textContent='›'; });
+  if(!isOpen){
+    body.classList.remove('hide');
+    if(arr) arr.textContent='↓';
+  }
+}
+
+function copyCommScript(typeId, personId){
+  const t = COMM_TYPES.find(x=>x.id===typeId);
+  const p = D.people.find(x=>x.id===personId);
+  if(!t||!p) return;
+  const text = t.script(p.region, p.name);
+  if(navigator.clipboard&&window.isSecureContext){
+    navigator.clipboard.writeText(text).then(()=>toast('문자 초안 복사 완료','📋')).catch(()=>_fallbackCopy(text));
+  } else { _fallbackCopy(text); }
+}
+
+/* ═══ 상세 보기 ══════════════════════════════════════════════════ */
 function cfURL(r,kw){return `https://search.naver.com/search.naver?where=article&query=${encodeURIComponent(r+' '+kw)}`;}
 function cmURL(r,kw){return `https://map.naver.com/p/search/${encodeURIComponent(r+' '+kw)}`;}
 
@@ -846,14 +1034,6 @@ function openDetail(id){
   for(let i=0;i<5;i++){const nx=cur.ref?D.people.find(x=>x.id===cur.ref):null;if(!nx)break;chain.push(nx);cur=nx;}
   chain.reverse();
   const pathHTML=chain.length>1?chain.map(x=>`<span style="color:${REL[x.rel].col};font-weight:600">${esc(x.name)}</span>`).join(' → '):'없음';
-  // 커뮤니티
-  let commHTML='';
-  if(p.region){
-    const btns=[{kw:'맘카페',ic:'👶',t:'c'},{kw:'주민 모임',ic:'🏘',t:'c'},{kw:'동호회',ic:'🎯',t:'c'},{kw:'헬스장',ic:'💪',t:'m'},{kw:'학부모 모임',ic:'📚',t:'c'},{kw:'직장인 모임',ic:'🏢',t:'c'}];
-    commHTML=`<div class="comm-box"><div class="comm-title">🔍 ${esc(p.region)} 커뮤니티 찾기</div><div class="comm-desc">${esc(p.name)}님 활동 지역의 커뮤니티를 검색합니다.</div><div class="comm-grid">${btns.map(b=>`<a class="comm-btn" href="${b.t==='m'?cmURL(p.region,b.kw):cfURL(p.region,b.kw)}" target="_blank" rel="noopener">${b.ic} ${b.kw}</a>`).join('')}</div><div class="comm-note">외부 검색(네이버) · 개인정보 미전송</div></div>`;
-  } else {
-    commHTML=`<div class="comm-box" style="text-align:center;padding:14px"><div class="comm-desc" style="margin:0">📍 활동 지역을 입력하면 커뮤니티를 바로 검색할 수 있습니다</div></div>`;
-  }
 
   /* ── 관계 온도 계산 ── */
   const tempScore = calcRelationshipTemp(p);
@@ -909,7 +1089,6 @@ function openDetail(id){
       </div>
       <div class="sb-text" id="sbText_${id}">${esc(SCRIPTS[p.rel]||SCRIPTS.customer)}</div>
     </div>
-    ${commHTML}
     ${renderPipelineHTML(p)}
     ${renderContactResultHTML(p)}
     ${referralStatusHTML}
@@ -917,6 +1096,7 @@ function openDetail(id){
     <button class="btn btn-ghost"   onclick="addReferred(${id})">🔗 이 사람이 소개한 인맥 추가</button>
     <button class="btn btn-ghost"   onclick="openForm(${id})">✏ 수정</button>
     <button class="btn btn-danger"  onclick="delPerson(${id})">🗑 삭제</button>
+    ${renderCommHTML(p)}
   `;
   openSheet('shDetail');
 }
@@ -1330,8 +1510,13 @@ function showMainView(id){
   document.querySelectorAll('.main-view').forEach(v=>v.classList.remove('show'));
   const el=document.getElementById(id);
   if(el) el.classList.add('show');
-  /* 연결망 뷰가 표시될 때 resize 트리거 */
-  if(id==='vMap') setTimeout(resize,50);
+  /* 연결망 뷰 진입 시: 크기 재계산 + 미배치 노드 배치 */
+  if(id==='vMap'){
+    setTimeout(()=>{
+      resize();
+      initPos();   /* POS에 없는 노드만 새로 배치 */
+    }, 30);        /* CSS transition 후 clientWidth가 확정되는 시점 */
+  }
 }
 document.querySelectorAll('.nitem').forEach(ni=>{
   ni.addEventListener('click',()=>{
