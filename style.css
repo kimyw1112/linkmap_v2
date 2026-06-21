@@ -398,7 +398,6 @@ input,select,textarea { font-family:var(--font); font-size:16px; color:var(--txt
 .hbtn-ic { font-size: 17px; line-height: 1; display: block; }
 .hbtn-lb { font-size: 9px; font-weight: 700; color: var(--txt3); line-height: 1; display: block; letter-spacing: .2px; }
 /* 스크립트 텍스트 */
-.sb-text { font-size:15px !important; line-height:1.9 !important; }
 /* 파이프라인 */
 .pl-label { font-size:15px !important; }
 .pl-date  { font-size:13px !important; }
@@ -830,8 +829,6 @@ html,body { height:100%; overflow:hidden; background:var(--bg); }
 .d-chips { display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-top:12px; }
 .dchip   { font-size:11px; font-weight:700; padding:4px 12px; border-radius:20px; }
 .kv-box  { background:var(--brand-pale); border:1px solid var(--border); border-radius:13px; padding:4px 14px; margin:14px 0; }
-.script-box { background:linear-gradient(135deg,var(--brand-pale),#FFF8F4); border:1px solid rgba(232,90,0,.2); border-radius:14px; padding:14px 16px; margin:14px 0; }
-.sb-label   { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--brand); margin-bottom:8px; display:flex; align-items:center; justify-content:space-between; }
 .sb-copy    { font-size:11px; font-weight:700; color:var(--brand); background:#fff; border:1px solid rgba(232,90,0,.3); border-radius:8px; padding:3px 10px; letter-spacing:0; text-transform:none; }
 .sb-copy:active { background:var(--brand); color:#fff; }
 
