@@ -976,9 +976,9 @@ function openSchedFromDetail(personId){
   closeSheet();
   setTimeout(()=>{
     openSchedForm(null);
-    /* 인물 선택 자동 설정 */
+    /* 인물 선택 자동 설정 + 파이프라인 자동반영 */
     const sel = document.getElementById('sPerson');
-    if(sel) sel.value = personId;
+    if(sel){ sel.value = personId; onSchedPersonChange(); }
     /* 날짜 오늘로 기본 설정 */
     const dateEl = document.getElementById('sDate');
     if(dateEl && !dateEl.value) dateEl.value = toDateStr(new Date());
@@ -1944,24 +1944,38 @@ function renderTodayFull(){
 
   if(meetingScheds.length){
     meetingScheds.forEach(s => {
-      const person  = s.personId ? D.people.find(p=>p.id===s.personId) : null;
-      const t       = person ? calcRelationshipTemp(person) : null;
-      const st      = (s.purpose !== undefined && s.purpose >= 0) ? PIPELINE_STAGES[s.purpose] : null;
-      const colPerson = person ? REL[person.rel].col : 'var(--brand)';
+      const person = s.personId ? D.people.find(p=>p.id===s.personId) : null;
+      const t      = person ? calcRelationshipTemp(person) : null;
+      const st     = (s.purpose !== undefined && s.purpose >= 0) ? PIPELINE_STAGES[s.purpose] : null;
+      const col    = person ? REL[person.rel].col : '#047857';
+      const clickTarget = person
+        ? `openDetail(${person.id})`
+        : `document.querySelector('.nitem[data-v=cal]').click()`;
 
-      html += `<div class="today-meeting-card" onclick="${person ? `openDetail(${person.id})` : `document.querySelector('.nitem[data-v=cal]').click()`}">
-        <div class="today-meeting-header">
-          ${s.time ? `<span class="today-meeting-time-badge">${s.time}</span>` : '<span class="today-meeting-time-badge" style="background:var(--bg2);color:var(--txt3)">시간 미정</span>'}
-          ${st ? `<span class="today-meeting-purpose-badge" style="background:${st.col}18;color:${st.col};border:1px solid ${st.col}44">${st.icon} ${st.label}</span>` : ''}
-        </div>
-        <div class="today-meeting-body">
-          ${person ? `<div class="today-meeting-av" style="background:linear-gradient(135deg,${lighten(colPerson)},${colPerson})">${esc((person.name||'?').charAt(0))}</div>` : ''}
-          <div class="today-meeting-info">
-            ${person ? `<div class="today-meeting-name" style="color:${colPerson}">${esc(person.name)}<span class="pbadge" style="background:${colPerson}18;color:${colPerson};margin-left:6px">${REL[person.rel].sh}</span></div>` : '<div class="today-meeting-name">미팅</div>'}
-            ${s.memo ? `<div class="today-meeting-place">📍 ${esc(s.memo)}</div>` : ''}
-            ${t ? `<div class="today-meeting-temp-row"><span style="color:${t.color}">${t.emoji.split('')[0]} 관계온도 ${t.total}°</span></div>` : ''}
+      html += `<div class="today-meeting-card" onclick="${clickTarget}">
+        <div class="today-meeting-top-label">📌 오늘 만날 분</div>
+        <div class="today-pick-body">
+          <div class="today-pick-av" style="background:linear-gradient(135deg,${lighten(col)},${col})">
+            ${esc(((person?.name)||'?').charAt(0))}
           </div>
-          <span class="today-meeting-arr">›</span>
+          <div class="today-pick-info">
+            <div class="today-pick-name">
+              ${person ? esc(person.name) : '미팅'}
+              ${person ? `<span class="pbadge" style="background:${col}22;color:${col};margin-left:8px">${REL[person.rel].sh}</span>` : ''}
+            </div>
+            <div class="today-meeting-meta">
+              ${st ? `<span class="today-meeting-purpose" style="color:${st.col}">${st.icon} ${st.label}</span>` : ''}
+              <span class="today-meeting-time-txt">${s.time || '시간 미정'}</span>
+            </div>
+            <div class="today-pick-hint">${s.memo ? `📍 ${esc(s.memo)}` : '<span style="color:var(--txt3)">장소 미정</span>'}</div>
+          </div>
+          <div class="today-pick-temp" style="color:${t ? t.color : '#059669'}">
+            ${t ? `<div class="today-pick-emoji">${t.emoji.split('')[0]}</div>
+            <div class="today-pick-num">${t.total}°</div>` : ''}
+          </div>
+        </div>
+        <div class="today-pick-bar-wrap">
+          <div class="today-pick-bar-fill" style="width:${t ? t.total : 0}%;background:${t ? t.color : '#059669'}"></div>
         </div>
       </div>`;
     });
