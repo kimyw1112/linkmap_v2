@@ -329,33 +329,167 @@ function resize(){
   cvs.style.width=W+'px'; cvs.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
 }
-function initPos(){
-  const cx=W/2,cy=H/2,n=D.people.length;
-  D.people.forEach((p,i)=>{
-    if(!POS[p.id]){ const a=(i/Math.max(1,n))*Math.PI*2,r=55+(i%6)*28; POS[p.id]={x:cx+Math.cos(a)*r,y:cy+Math.sin(a)*r,vx:0,vy:0}; }
-  });
-}
-function sim(){
-  const ppl=D.people,cx=W/2,cy=H/2;
-  for(const p of ppl){
-    const pp=POS[p.id]; if(!pp||ST.dragNode===p.id) continue;
-    pp.vx+=(cx-pp.x)*.0014; pp.vy+=(cy-pp.y)*.0014;
-    for(const q of ppl){
-      if(q.id===p.id) continue;
-      const qp=POS[q.id]; if(!qp) continue;
-      const dx=pp.x-qp.x,dy=pp.y-qp.y,d2=Math.max(1,dx*dx+dy*dy),d=Math.sqrt(d2),f=2800/d2;
-      pp.vx+=(dx/d)*f; pp.vy+=(dy/d)*f;
-    }
-    if(p.ref){const rp=POS[p.ref];if(rp){pp.vx+=(rp.x-pp.x)*.005;pp.vy+=(rp.y-pp.y)*.005;}}
-    pp.vx*=.84; pp.vy*=.84; pp.x+=pp.vx; pp.y+=pp.vy;
-  }
-}
 const w2s=(x,y)=>({sx:x*ST.zoom+ST.ox,sy:y*ST.zoom+ST.oy});
 const s2w=(sx,sy)=>({x:(sx-ST.ox)/ST.zoom,y:(sy-ST.oy)/ST.zoom});
 
+/* ── 허브 중심 계층 정적 레이아웃 ──────────────────────────────
+   규칙:
+   1) 허브(소개 2명+)는 화면 중심 가까이 배치
+   2) 각 허브 주변에 그 자식들을 원형으로 배치
+   3) 루트 노드(ref 없는)는 허브가 아니면 외곽 배치
+   4) 노드 겹침 방지: 최소 간격 = (r1+r2+20)px
+   5) 한 번 배치하면 고정 (물리 시뮬 없음)
+──────────────────────────────────────────────────────────────── */
+let _layoutDone = false;
+
+function initPos(){
+  /* 캔버스 크기 준비 안 된 경우 보정 */
+  if(W===0||H===0) return;
+
+  const ppl = D.people;
+  if(!ppl.length) return;
+
+  /* 이미 위치 있는 노드는 그대로 유지 (추가된 노드만 새로 배치) */
+  const newNodes = ppl.filter(p=>!POS[p.id]);
+  if(!newNodes.length) return;
+
+  /* 전체 재배치 필요 여부: 처음 배치이거나 삭제/추가 비율이 크면 재계산 */
+  const needFull = Object.keys(POS).length === 0;
+
+  if(needFull){
+    _doFullLayout(ppl);
+  } else {
+    /* 신규 노드만 빈 자리에 삽입 */
+    newNodes.forEach(p => _placeNewNode(p, ppl));
+  }
+}
+
+function _doFullLayout(ppl){
+  const cx = W/2, cy = H/2;
+
+  /* ① 소개 횟수 기준 정렬 */
+  const sorted = [...ppl].sort((a,b) => rc(b.id) - rc(a.id));
+
+  /* ② 허브 (소개 2명 이상) */
+  const hubs  = sorted.filter(p => rc(p.id) >= 2);
+  const roots = sorted.filter(p => !p.ref && rc(p.id) < 2);  // 독립 루트
+  const leaves = sorted.filter(p => p.ref && rc(p.id) < 2);   // 자식 리프
+
+  const placed = new Set();
+
+  /* ③ 허브를 중심 근처에 배치 */
+  const hubR = Math.min(80, W * 0.12);  // 허브끼리 거리 반경
+  hubs.forEach((p, i) => {
+    let x, y;
+    if(hubs.length === 1){
+      x = cx; y = cy;
+    } else {
+      const a = (i / hubs.length) * Math.PI * 2 - Math.PI/2;
+      x = cx + Math.cos(a) * hubR;
+      y = cy + Math.sin(a) * hubR;
+    }
+    POS[p.id] = { x, y };
+    placed.add(p.id);
+  });
+
+  /* ④ 각 허브 주변에 자식 배치 */
+  hubs.forEach(hub => {
+    const children = ppl.filter(p => p.ref === hub.id && !placed.has(p.id));
+    const rHub  = nodeR(hub);
+    const childSpacing = 70;   // 자식끼리 간격
+    const orbitR = rHub + childSpacing;
+    children.forEach((child, i) => {
+      const a = (i / Math.max(1, children.length)) * Math.PI * 2 - Math.PI/2;
+      const nx = POS[hub.id].x + Math.cos(a) * orbitR;
+      const ny = POS[hub.id].y + Math.sin(a) * orbitR;
+      POS[child.id] = { x: _clamp(nx, 30, W-30), y: _clamp(ny, 30, H-30) };
+      placed.add(child.id);
+
+      /* 손자 배치 */
+      const grandChildren = ppl.filter(p => p.ref === child.id && !placed.has(p.id));
+      const gcR = nodeR(child) + 55;
+      grandChildren.forEach((gc, j) => {
+        const ga = a + (j - (grandChildren.length-1)/2) * 0.5;
+        POS[gc.id] = {
+          x: _clamp(POS[child.id].x + Math.cos(ga)*gcR, 30, W-30),
+          y: _clamp(POS[child.id].y + Math.sin(ga)*gcR, 30, H-30)
+        };
+        placed.add(gc.id);
+      });
+    });
+  });
+
+  /* ⑤ 나머지(루트 + 아직 미배치) 외곽 배치 */
+  const remaining = ppl.filter(p => !placed.has(p.id));
+  const outerR = Math.min(W, H) * 0.38;
+  remaining.forEach((p, i) => {
+    const a = (i / Math.max(1, remaining.length)) * Math.PI * 2 - Math.PI/2;
+    POS[p.id] = {
+      x: _clamp(cx + Math.cos(a) * outerR, 30, W-30),
+      y: _clamp(cy + Math.sin(a) * outerR, 30, H-30)
+    };
+    placed.add(p.id);
+  });
+
+  /* ⑥ 겹침 방지 패스 (반복 3회) */
+  for(let pass=0; pass<3; pass++) _resolveOverlaps(ppl);
+}
+
+function _placeNewNode(p, ppl){
+  /* 부모 위치 기준으로 배치, 없으면 화면 가장자리 */
+  let bx = W*0.85, by = 40;
+  if(p.ref && POS[p.ref]){
+    const parent = POS[p.ref];
+    /* 부모 주변 미사용 각도 찾기 */
+    const siblings = ppl.filter(q => q.ref===p.ref && POS[q.id] && q.id!==p.id);
+    const usedAngles = siblings.map(s => Math.atan2(POS[s.id].y-parent.y, POS[s.id].x-parent.x));
+    let bestA = 0;
+    for(let a=0; a<Math.PI*2; a+=0.3){
+      if(usedAngles.every(ua => Math.abs(ua-a)>0.25)){ bestA=a; break; }
+    }
+    const dist = nodeR(ppl.find(q=>q.id===p.ref)||p) + 65;
+    bx = parent.x + Math.cos(bestA)*dist;
+    by = parent.y + Math.sin(bestA)*dist;
+  }
+  POS[p.id] = { x: _clamp(bx, 30, W-30), y: _clamp(by, 30, H-30) };
+  _resolveOverlaps(ppl);
+}
+
+function _resolveOverlaps(ppl){
+  for(let i=0; i<ppl.length; i++){
+    for(let j=i+1; j<ppl.length; j++){
+      const a=ppl[i], b=ppl[j];
+      const pa=POS[a.id], pb=POS[b.id];
+      if(!pa||!pb) continue;
+      const minDist = nodeR(a) + nodeR(b) + 18;
+      const dx=pb.x-pa.x, dy=pb.y-pa.y;
+      const d=Math.sqrt(dx*dx+dy*dy)||1;
+      if(d < minDist){
+        const push = (minDist - d) / 2;
+        const nx=dx/d, ny=dy/d;
+        /* 허브는 덜 밀림 */
+        const wa = isHub(a.id)?0.2:0.5;
+        const wb = isHub(b.id)?0.2:0.5;
+        pa.x = _clamp(pa.x - nx*push*wa, 20, W-20);
+        pa.y = _clamp(pa.y - ny*push*wa, 20, H-20);
+        pb.x = _clamp(pb.x + nx*push*wb, 20, W-20);
+        pb.y = _clamp(pb.y + ny*push*wb, 20, H-20);
+      }
+    }
+  }
+}
+
+function _clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+/* 연결망 전체 재배치 (노드 추가/삭제 후 호출) */
+function relayout(){
+  Object.keys(POS).forEach(k => delete POS[k]);
+  initPos();
+}
+
 function draw(){
   ctx.clearRect(0,0,W,H);
-  // 엣지
+  /* 엣지 */
   for(const p of D.people){
     if(!p.ref) continue;
     const a=POS[p.ref],b=POS[p.id]; if(!a||!b) continue;
@@ -368,28 +502,28 @@ function draw(){
     g2.addColorStop(1,show?'rgba(60,100,180,.22)':'rgba(0,0,0,.02)');
     ctx.strokeStyle=g2;
     ctx.beginPath(); ctx.moveTo(pa.sx,pa.sy);
-    ctx.quadraticCurveTo((pa.sx+pb.sx)/2,(pa.sy+pb.sy)/2-16,pb.sx,pb.sy);
+    ctx.quadraticCurveTo((pa.sx+pb.sx)/2,(pa.sy+pb.sy)/2-12,pb.sx,pb.sy);
     ctx.stroke();
     if(show){
       const ang=Math.atan2(pb.sy-pa.sy,pb.sx-pa.sx),rr=nodeR(p)*ST.zoom;
       const ax=pb.sx-Math.cos(ang)*rr,ay=pb.sy-Math.sin(ang)*rr;
       ctx.fillStyle='rgba(80,130,220,.55)';
       ctx.beginPath(); ctx.moveTo(ax,ay);
-      ctx.lineTo(ax-Math.cos(ang-.45)*8,ay-Math.sin(ang-.45)*8);
-      ctx.lineTo(ax-Math.cos(ang+.45)*8,ay-Math.sin(ang+.45)*8);
+      ctx.lineTo(ax-Math.cos(ang-.45)*7,ay-Math.sin(ang-.45)*7);
+      ctx.lineTo(ax-Math.cos(ang+.45)*7,ay-Math.sin(ang+.45)*7);
       ctx.closePath(); ctx.fill();
     }
   }
-  // 노드
+  /* 노드 */
   for(const p of D.people){
     const pp=POS[p.id]; if(!pp) continue;
     const s=w2s(pp.x,pp.y),r=nodeR(p)*ST.zoom,show=visible(p),hub=isHub(p.id),sel=ST.selId===p.id;
     const col=REL[p.rel].col;
     if(!show){ ctx.beginPath(); ctx.arc(s.sx,s.sy,r*.5,0,Math.PI*2); ctx.fillStyle='rgba(0,0,0,.06)'; ctx.fill(); continue; }
     if(hub||sel){
-      const gr=ctx.createRadialGradient(s.sx,s.sy,0,s.sx,s.sy,r*2.5);
+      const gr=ctx.createRadialGradient(s.sx,s.sy,0,s.sx,s.sy,r*2.4);
       gr.addColorStop(0,col+(sel?'44':'28')); gr.addColorStop(1,'transparent');
-      ctx.beginPath(); ctx.arc(s.sx,s.sy,r*2.5,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
+      ctx.beginPath(); ctx.arc(s.sx,s.sy,r*2.4,0,Math.PI*2); ctx.fillStyle=gr; ctx.fill();
     }
     const bg=ctx.createRadialGradient(s.sx-r*.25,s.sy-r*.25,0,s.sx,s.sy,r);
     bg.addColorStop(0,lighten(col)); bg.addColorStop(1,col);
@@ -407,7 +541,8 @@ function draw(){
     }
   }
 }
-function loop(){ sim(); draw(); requestAnimationFrame(loop); }
+/* 물리 시뮬 없음 — draw만 rAF로 반복 (드래그 반응용) */
+function loop(){ draw(); requestAnimationFrame(loop); }
 
 /* ── 터치/마우스 인터랙션 ── */
 function nodeAt(sx,sy){
@@ -437,7 +572,7 @@ function onMv(e){
   if(pinching||!ST.drag)return;
   const{x,y}=gxy(e);
   if(Math.hypot(x-sp.x,y-sp.y)>10){moved=true;tapId=null;}
-  if(ST.dragNode){const w=s2w(x,y);POS[ST.dragNode].x=w.x;POS[ST.dragNode].y=w.y;POS[ST.dragNode].vx=POS[ST.dragNode].vy=0;}
+  if(ST.dragNode){const w=s2w(x,y);POS[ST.dragNode].x=w.x;POS[ST.dragNode].y=w.y;}
   else if(ST.drag.ps){ST.ox=ST.drag.ps.ox+(x-ST.drag.x);ST.oy=ST.drag.ps.oy+(y-ST.drag.y);}
 }
 function onUp(){
@@ -1308,33 +1443,38 @@ function calcSuccessRate(){
 }
 
 /* ─── 첫 실행 온보딩 ─── */
+/* ═══ 온보딩 튜토리얼 ══════════════════════════════════════════ */
 function checkOnboard(){
-  const seen=localStorage.getItem('lm_onboard_seen');
-  if(!seen && D.people.length===0){
-    document.getElementById('onboardOverlay').style.display='flex';
+  const seen = localStorage.getItem('lm_onboard_seen');
+  if(!seen && D.people.length === 0){
+    document.getElementById('onboardOverlay').style.display = 'flex';
+    obGoTo(1);
+  } else {
+    document.getElementById('onboardOverlay').style.display = 'none';
   }
 }
-function closeOnboard(){
-  document.getElementById('onboardOverlay').style.display='none';
+function obGoTo(n){
+  [1,2,3].forEach(i=>{
+    const el = document.getElementById('obSlide'+i);
+    if(el) el.classList.toggle('hide', i!==n);
+  });
+}
+function skipOnboard(){
+  document.getElementById('onboardOverlay').style.display = 'none';
   localStorage.setItem('lm_onboard_seen','1');
   openForm();
 }
+function closeOnboard(){ skipOnboard(); }
 function startWithSample(){
-  document.getElementById('onboardOverlay').style.display='none';
+  document.getElementById('onboardOverlay').style.display = 'none';
   localStorage.setItem('lm_onboard_seen','1');
   loadSample();
 }
 
 /* ═══ 통계 갱신 ═════════════════════════════════════════════════ */
 function refresh(){
-  initPos();
-  document.getElementById('stTotal').textContent=D.people.length;
-  document.getElementById('stEdge').textContent=D.people.filter(p=>p.ref).length;
-  const rate=calcSuccessRate();
-  const rateEl=document.getElementById('stRate');
-  if(rate===null){ rateEl.textContent='—'; rateEl.style.fontSize='18px'; }
-  else { rateEl.textContent=rate+'%'; rateEl.style.fontSize=rate===100?'12px':'13px'; }
-  document.getElementById('stAlert').textContent=buildAlerts().filter(i=>i.lvl>0).length;
+  /* 통계 바 제거됨 — 레이아웃만 갱신 */
+  relayout();
   document.getElementById('cvHint').style.display=D.people.length?'none':'flex';
   renderTodayDash();
   renderList(); renderAlerts();
@@ -1873,7 +2013,8 @@ async function init(){
   }catch(e){window.location.href='index.html';return;}
   await load();
   await loadScheds();
-  resize(); initPos(); refresh(); loop(); checkLock();
+  resize(); relayout(); loop(); checkLock();
+  refresh();
   checkOnboard();
   window.addEventListener('resize',resize);
   registerSW();

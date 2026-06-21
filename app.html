@@ -35,16 +35,6 @@
   </div>
   <input type="file" id="fileIn" accept=".json" style="display:none">
 
-  <!-- 통계 바 -->
-  <div class="stats">
-    <div class="stat-card" style="--acc:var(--brand)">   <div class="stat-val" id="stTotal">0</div><div class="stat-lbl">전체 인맥</div></div>
-    <div class="stat-card" style="--acc:var(--blue)">    <div class="stat-val" id="stEdge">0</div> <div class="stat-lbl">소개 연결</div></div>
-    <div class="stat-card" style="--acc:var(--green)" id="stRateCard" title="고객 중 1명 이상 소개한 비율">
-      <div class="stat-val" id="stRate" style="font-size:13px">—</div>
-      <div class="stat-lbl">소개 성공률</div>
-    </div>
-    <div class="stat-card" style="--acc:var(--red)">     <div class="stat-val" id="stAlert">0</div><div class="stat-lbl">연락 알림</div></div>
-  </div>
 
   <!-- 메인 컨테이너 -->
   <div class="main-container">
@@ -63,18 +53,85 @@
     <button class="map-fab today-fab" id="fabAddToday">＋</button>
   </div>
 
-  <!-- ─── 연결망 뷰 (서브뷰로 전환) ─── -->
-  <div class="main-view" id="vMap">
-    <!-- 온보딩 오버레이 -->
-    <div id="onboardOverlay" class="onboard-overlay" style="display:none">
-      <div class="onboard-card">
-        <div class="onboard-ic">🔗</div>
-        <h3>LinkMap에 오신 것을 환영합니다!</h3>
-        <p>소개 영업 관리를 시작해 보세요<br>먼저 고객을 등록하거나<br>샘플로 둘러볼 수 있습니다</p>
-        <button class="btn btn-primary" onclick="startWithSample()" style="margin-bottom:10px">✨ 샘플로 먼저 둘러보기</button>
-        <button class="btn btn-ghost" onclick="closeOnboard()">+ 직접 고객 추가하기</button>
+  <!-- ─── 온보딩 튜토리얼 (풀스크린, 앱 시작 시 최초 1회) ─── -->
+  <div id="onboardOverlay" class="ob-overlay">
+
+    <!-- 슬라이드 1: 앱 소개 -->
+    <div class="ob-slide" id="obSlide1">
+      <div class="ob-skip" onclick="skipOnboard()">건너뛰기</div>
+      <div class="ob-visual">
+        <div class="ob-icon-big">🔗</div>
+        <div class="ob-dots-preview">
+          <div class="ob-node ob-hub">이정훈<br><span>⭐허브</span></div>
+          <div class="ob-line"></div>
+          <div class="ob-node ob-child">박서연</div>
+          <div class="ob-line"></div>
+          <div class="ob-node ob-child2">김지아</div>
+        </div>
       </div>
+      <div class="ob-content">
+        <div class="ob-step">1 / 3</div>
+        <h2 class="ob-title">소개 연결망을<br>한눈에 관리하세요</h2>
+        <p class="ob-desc">누가 누구를 소개했는지 시각적으로 연결하고,<br>핵심 허브 고객을 자동으로 찾아드립니다.</p>
+      </div>
+      <div class="ob-actions">
+        <button class="ob-next" onclick="obGoTo(2)">다음 →</button>
+      </div>
+      <div class="ob-progress"><div class="ob-prog-fill" style="width:33%"></div></div>
     </div>
+
+    <!-- 슬라이드 2: 핵심 기능 -->
+    <div class="ob-slide hide" id="obSlide2">
+      <div class="ob-skip" onclick="skipOnboard()">건너뛰기</div>
+      <div class="ob-visual">
+        <div class="ob-feature-list">
+          <div class="ob-feat"><span class="ob-feat-ic">📞</span><div><b>연락 타이밍 알림</b><br>놓치기 전에 먼저 알려드려요</div></div>
+          <div class="ob-feat"><span class="ob-feat-ic">📊</span><div><b>5단계 영업 파이프라인</b><br>고객 등록부터 지인소개까지</div></div>
+          <div class="ob-feat"><span class="ob-feat-ic">🌡</span><div><b>관계 온도 지수</b><br>관계가 식기 전에 관리하세요</div></div>
+          <div class="ob-feat"><span class="ob-feat-ic">📅</span><div><b>미팅 일정 관리</b><br>인맥과 연결된 일정을 등록하세요</div></div>
+        </div>
+      </div>
+      <div class="ob-content">
+        <div class="ob-step">2 / 3</div>
+        <h2 class="ob-title">영업에 필요한 모든 것</h2>
+        <p class="ob-desc">연락, 일정, 파이프라인, 스크립트까지<br>하나의 앱에서 관리할 수 있어요.</p>
+      </div>
+      <div class="ob-actions">
+        <button class="ob-back" onclick="obGoTo(1)">← 이전</button>
+        <button class="ob-next" onclick="obGoTo(3)">다음 →</button>
+      </div>
+      <div class="ob-progress"><div class="ob-prog-fill" style="width:66%"></div></div>
+    </div>
+
+    <!-- 슬라이드 3: 시작 방법 선택 -->
+    <div class="ob-slide hide" id="obSlide3">
+      <div class="ob-visual ob-visual-choice">
+        <div class="ob-choice-card" onclick="startWithSample()">
+          <div class="ob-choice-ic">✨</div>
+          <div class="ob-choice-title">샘플로 체험하기</div>
+          <div class="ob-choice-desc">미리 입력된 예시 데이터로<br>앱 기능을 먼저 살펴봐요</div>
+        </div>
+        <div class="ob-choice-card ob-choice-primary" onclick="skipOnboard()">
+          <div class="ob-choice-ic">➕</div>
+          <div class="ob-choice-title">바로 시작하기</div>
+          <div class="ob-choice-desc">첫 번째 인맥을<br>직접 등록해보세요</div>
+        </div>
+      </div>
+      <div class="ob-content">
+        <div class="ob-step">3 / 3</div>
+        <h2 class="ob-title">어떻게 시작할까요?</h2>
+        <p class="ob-desc">샘플 데이터는 나중에 설정에서<br>언제든지 삭제할 수 있습니다.</p>
+      </div>
+      <div class="ob-actions ob-actions-back">
+        <button class="ob-back" onclick="obGoTo(2)">← 이전</button>
+      </div>
+      <div class="ob-progress"><div class="ob-prog-fill" style="width:100%"></div></div>
+    </div>
+
+  </div><!-- /#onboardOverlay -->
+
+  <!-- ─── 연결망 뷰 ─── -->
+  <div class="main-view" id="vMap">
 
     <div class="map-wrap" id="mapWrap">
       <canvas id="cvs"></canvas>
