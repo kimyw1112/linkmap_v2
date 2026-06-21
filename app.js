@@ -1665,163 +1665,229 @@ function refresh(){
   renderList(); renderAlerts();
 }
 
-/* ─── 오늘 할 일 풀뷰 렌더링 ─── */
+/* ═══ 소개 예측 점수 (Referral Prediction Score) ══════════════
+   "이 고객이 30일 안에 소개해줄 확률"을 0~100%로 계산
+   ─────────────────────────────────────────────────────────────
+   변수 5개:
+   1) 파이프라인 완료 여부 (+35)  : 보험가입까지 완료 → 소개 요청 적기
+   2) 최근 접촉 신선도 (+25)     : 최근 접촉일수록 관계 온기 있음
+   3) 소개 이력 (+20)            : 과거에 소개한 사람은 또 소개함
+   4) 접촉 빈도 추세 (+15)       : 최근 3개월 접촉이 그 전보다 잦으면 상승
+   5) 관계 유형 보정 (×0.7~1.0)  : 기존 고객 > 지인 > 신규
+════════════════════════════════════════════════════════════════ */
+function calcReferralScore(p){
+  let score = 0;
+  const details = {};
+
+  /* 1) 파이프라인 완료 */
+  if(p.pipeline){
+    const pl = ensurePipeline(p);
+    const done = pl.dates.filter(Boolean).length;
+    if(done >= 4){       // 보험가입 완료
+      score += 35; details.pipeline = 35;
+    } else if(done >= 2){
+      score += 15; details.pipeline = 15;
+    } else {
+      details.pipeline = 0;
+    }
+  } else { details.pipeline = 0; }
+
+  /* 2) 최근 접촉 신선도 */
+  const d = ago(p.lastContact);
+  if(d === null){
+    details.fresh = 0;
+  } else if(d <= 7){
+    score += 25; details.fresh = 25;
+  } else if(d <= 14){
+    score += 18; details.fresh = 18;
+  } else if(d <= 30){
+    score += 10; details.fresh = 10;
+  } else {
+    details.fresh = 0;
+  }
+
+  /* 3) 소개 이력 */
+  const refCount = rc(p.id);
+  if(refCount >= 3){
+    score += 20; details.history = 20;
+  } else if(refCount >= 1){
+    score += 12; details.history = 12;
+  } else {
+    details.history = 0;
+  }
+
+  /* 4) 접촉 빈도 추세 (contactLog 활용) */
+  const log = p.contactLog || [];
+  const now = Date.now();
+  const recent90  = log.filter(l => ago(l.date) !== null && ago(l.date) <= 90).length;
+  const prev90    = log.filter(l => { const a=ago(l.date); return a!==null && a>90 && a<=180; }).length;
+  if(recent90 > prev90 && recent90 >= 2){
+    score += 15; details.trend = 15;
+  } else if(recent90 >= 1){
+    score += 7; details.trend = 7;
+  } else {
+    details.trend = 0;
+  }
+
+  /* 5) 관계 유형 보정 */
+  const mult = p.rel==='customer' ? 1.0 : p.rel==='friend' ? 0.85 : 0.7;
+  score = Math.round(score * mult);
+  score = Math.min(98, Math.max(0, score));
+
+  /* 레벨 분류 */
+  let level, color, emoji, msg;
+  if(score >= 70){
+    level='high';   color='#15803D'; emoji='🔥';
+    msg='소개 요청하기 딱 좋은 타이밍이에요';
+  } else if(score >= 45){
+    level='mid';    color='#D97706'; emoji='✨';
+    msg='연락하면 소개로 이어질 가능성이 높아요';
+  } else if(score >= 20){
+    level='low';    color='#1A6FD4'; emoji='💬';
+    msg='먼저 관계를 더 쌓아보세요';
+  } else {
+    level='cold';   color='#9C8878'; emoji='❄️';
+    msg='접촉 기록을 쌓으면 예측이 정확해져요';
+  }
+
+  return { score, level, color, emoji, msg, details };
+}
+
+/* 오늘 연락 1순위를 선정하는 함수 */
+function pickTodayHero(){
+  /* 기존 고객 + 지인 중 소개 예측 점수 상위 1명 */
+  const candidates = D.people
+    .filter(p => p.rel==='customer' || p.rel==='friend')
+    .map(p => ({ p, rs: calcReferralScore(p), temp: calcRelationshipTemp(p) }))
+    .filter(x => x.rs.score >= 20)   /* 너무 낮으면 제외 */
+    .sort((a,b) => b.rs.score - a.rs.score);
+
+  return candidates[0] || null;
+}
+
+/* ─── 오늘 할 일 풀뷰 렌더링 (전면 재작성) ─── */
 function renderTodayFull(){
   /* 날짜 헤더 */
-  const hdrEl=document.getElementById('todayDateHdr');
+  const hdrEl = document.getElementById('todayDateHdr');
   if(hdrEl){
-    const now=new Date();
-    const DOW=['일','월','화','수','목','금','토'];
-    hdrEl.textContent=`${now.getMonth()+1}월 ${now.getDate()}일 (${DOW[now.getDay()]})`;
+    const now = new Date();
+    const DOW = ['일','월','화','수','목','금','토'];
+    hdrEl.innerHTML = `
+      <div class="today-date-main">${now.getMonth()+1}월 ${now.getDate()}일 (${DOW[now.getDay()]})</div>
+      <div class="today-date-sub">${D.people.length ? '오늘 챙길 분을 확인하세요' : '먼저 인맥을 추가해보세요'}</div>`;
   }
 
-  const box=document.getElementById('todayDash'); if(!box) return;
-  const today=new Date().toISOString().slice(0,10);
-
-  /* 연락 필요 */
-  const needContact=buildAlerts().filter(i=>i.lvl>0);
-  /* 오늘 일정 */
-  const todayScheds=(SCHEDS||[]).filter(s=>s.date===today).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
-  /* 파이프라인 진행 중 */
-  const inProgress=D.people.filter(p=>{
-    if(!p.pipeline) return false;
-    const completed=p.pipeline.dates?p.pipeline.dates.filter(Boolean).length:0;
-    return completed>0 && completed<5;
-  });
-  /* 관계 온도 위험군 */
-  const coldPeople=D.people.filter(p=>{
-    const t=calcRelationshipTemp(p);
-    return t.total<40 && (p.rel==='customer'||p.rel==='friend');
-  }).sort((a,b)=>calcRelationshipTemp(a).total-calcRelationshipTemp(b).total).slice(0,3);
-
-  let html='';
-
-  /* 연락 필요 섹션 */
-  if(needContact.length){
-    const urgent=needContact.filter(i=>i.lvl>=2);
-    const warn=needContact.filter(i=>i.lvl===1);
-    html+=`<div class="td-section">
-      <div class="td-sec-title">📞 오늘 연락할 사람 (${needContact.length}명)</div>`;
-    needContact.slice(0,5).forEach(it=>{
-      const d=ago(it.p.lastContact);
-      const isUrgent=it.lvl>=2;
-      html+=`<div class="td-person-card ${isUrgent?'urgent':''}" onclick="openDetail(${it.p.id})">
-        <div class="td-pav" style="background:${REL[it.p.rel].col}">${esc((it.p.name||'?').charAt(0))}</div>
-        <div class="td-pinfo">
-          <div class="td-pname">${esc(it.p.name)}<span class="pbadge" style="background:${REL[it.p.rel].col}22;color:${REL[it.p.rel].col};margin-left:6px">${REL[it.p.rel].sh}</span></div>
-          <div class="td-preason">${d!==null?d+'일 경과':'기록 없음'} — ${it.reason}</div>
-        </div>
-        <button class="td-call" onclick="event.stopPropagation();markContact(${it.p.id})">접촉</button>
-      </div>`;
-    });
-    if(needContact.length>5) html+=`<div class="td-more" onclick="document.querySelector('.nitem[data-v=alerts]').click()">+ ${needContact.length-5}명 더 보기 →</div>`;
-    html+=`</div>`;
-  }
-
-  /* 오늘 일정 섹션 */
-  if(todayScheds.length){
-    html+=`<div class="td-section">
-      <div class="td-sec-title">📅 오늘 일정 (${todayScheds.length}건)</div>`;
-    todayScheds.forEach(s=>{
-      const person=s.personId?D.people.find(p=>p.id===s.personId):null;
-      const autoTag=s.autoGenerated?`<span class="td-auto-tag">자동생성</span>`:'';
-      html+=`<div class="td-sched-card" onclick="document.querySelector('.nitem[data-v=cal]').click()">
-        <div class="td-sched-time">${s.time||'—'}</div>
-        <div class="td-sched-info">
-          <div class="td-sched-title">${esc(s.title)}${autoTag}</div>
-          ${person?`<div class="td-sched-person">👤 ${esc(person.name)}</div>`:''}
-        </div>
-      </div>`;
-    });
-    html+=`</div>`;
-  }
-
-  /* 파이프라인 진행 중 섹션 */
-  if(inProgress.length){
-    html+=`<div class="td-section">
-      <div class="td-sec-title">⚡ 영업 진행 중 (${inProgress.length}명)</div>`;
-    inProgress.slice(0,4).forEach(p=>{
-      const pl=ensurePipeline(p);
-      const curStageIdx=pl.dates.filter(Boolean).length-1;
-      const curStage=PIPELINE_STAGES[Math.max(0,curStageIdx)];
-      html+=`<div class="td-pipe-card" onclick="openDetail(${p.id})">
-        <div class="td-pav" style="background:${curStage.col}">${esc((p.name||'?').charAt(0))}</div>
-        <div class="td-pinfo">
-          <div class="td-pname">${esc(p.name)}</div>
-          <div class="td-pipe-stage" style="color:${curStage.col}">${curStage.icon} ${curStage.label} 단계</div>
-        </div>
-        <span class="td-arrow">›</span>
-      </div>`;
-    });
-    html+=`</div>`;
-  }
-
-  /* 관계 온도 위험군 */
-  if(coldPeople.length){
-    html+=`<div class="td-section">
-      <div class="td-sec-title">🥶 관계 온도 주의 (식어가는 중)</div>`;
-    coldPeople.forEach(p=>{
-      const t=calcRelationshipTemp(p);
-      html+=`<div class="td-cold-card" onclick="openDetail(${p.id})">
-        <span class="td-cold-emoji">${t.emoji}</span>
-        <div class="td-pinfo">
-          <div class="td-pname">${esc(p.name)}</div>
-          <div class="td-cold-score" style="color:${t.color}">${t.label} · ${t.total}점</div>
-        </div>
-        <span class="td-arrow">›</span>
-      </div>`;
-    });
-    html+=`</div>`;
-  }
-
-  if(!html){
-    html=`<div class="td-empty">
-      <div class="td-empty-ic">🎉</div>
-      <div class="td-empty-msg">오늘 할 일이 없습니다!<br>관계망이 잘 관리되고 있어요</div>
-    </div>`;
-  }
-
-  box.innerHTML=html;
-
-  /* 관계 온도 섹션 (인맥 전체 요약) */
-  renderTempSummary();
+  renderTodayHero();
+  renderTodayList();
 }
 
-function renderTempSummary(){
-  const box=document.getElementById('todayTemp'); if(!box) return;
+/* ★ 소개 예측 — 오늘의 1순위 히어로 카드 */
+function renderTodayHero(){
+  const box = document.getElementById('todayHero'); if(!box) return;
   if(!D.people.length){ box.innerHTML=''; return; }
 
-  const scored=D.people
-    .filter(p=>p.rel==='customer'||p.rel==='friend')
-    .map(p=>({p,t:calcRelationshipTemp(p)}))
-    .sort((a,b)=>b.t.total-a.t.total);
+  const hero = pickTodayHero();
+  if(!hero){ box.innerHTML=''; return; }
 
-  if(!scored.length){ box.innerHTML=''; return; }
+  const { p, rs } = hero;
+  const col = REL[p.rel].col;
+  const d   = ago(p.lastContact);
 
-  const hot=scored.filter(x=>x.t.total>=60).slice(0,3);
-  const cold=scored.filter(x=>x.t.total<40).slice(0,3);
-
-  let html=`<div class="td-section">
-    <div class="td-sec-title">🌡 관계 온도 현황</div>
-    <div class="temp-summary-grid">`;
-
-  scored.slice(0,6).forEach(({p,t})=>{
-    html+=`<div class="temp-mini-card" onclick="openDetail(${p.id})">
-      <div class="temp-mini-emoji">${t.emoji.charAt(0)}</div>
-      <div class="temp-mini-name">${esc(p.name)}</div>
-      <div class="temp-mini-score" style="color:${t.color}">${t.total}점</div>
+  box.innerHTML = `
+    <div class="hero-card" onclick="openDetail(${p.id})">
+      <div class="hero-label">⭐ 오늘 연락할 1순위</div>
+      <div class="hero-body">
+        <div class="hero-av" style="background:linear-gradient(135deg,${lighten(col)},${col})">${esc((p.name||'?').charAt(0))}</div>
+        <div class="hero-info">
+          <div class="hero-name">${esc(p.name)}</div>
+          <div class="hero-sub">${REL[p.rel].lbl}${d!==null?' · '+d+'일 전 연락':' · 연락 기록 없음'}</div>
+        </div>
+        <div class="hero-score" style="color:${rs.color}">${rs.score}%</div>
+      </div>
+      <div class="hero-bar-wrap">
+        <div class="hero-bar-fill" style="width:${rs.score}%;background:${rs.color}"></div>
+      </div>
+      <div class="hero-msg">${rs.emoji} ${rs.msg}</div>
+      <button class="hero-call-btn" onclick="event.stopPropagation();markContact(${p.id});renderTodayFull()">
+        📞 오늘 연락했어요
+      </button>
     </div>`;
-  });
-  html+=`</div></div>`;
-  box.innerHTML=html;
 }
 
-/* ─── 기존 renderTodayDash (통계 바 위 미니 대시보드) — 탭뷰에선 사용 안 함 ─── */
-function renderTodayDash(){
-  /* 메인 오늘뷰가 활성화된 경우 renderTodayFull로 대신함 */
-  const activeTab=document.querySelector('.nitem.on');
-  if(activeTab&&activeTab.dataset.v==='today') renderTodayFull();
+/* 나머지 할 일 목록 — 심플하게 */
+function renderTodayList(){
+  const box = document.getElementById('todayDash'); if(!box) return;
+  const today = new Date().toISOString().slice(0,10);
+
+  /* 연락 필요 (히어로 제외, 최대 3명) */
+  const hero = pickTodayHero();
+  const heroId = hero ? hero.p.id : null;
+  const needContact = buildAlerts()
+    .filter(i => i.lvl > 0 && i.p.id !== heroId)
+    .slice(0, 3);
+
+  /* 오늘 일정 */
+  const todayScheds = (SCHEDS||[])
+    .filter(s => s.date===today)
+    .sort((a,b) => (a.time||'').localeCompare(b.time||''));
+
+  let html = '';
+
+  /* 연락 더 필요한 분 */
+  if(needContact.length){
+    html += `<div class="tl-section">
+      <div class="tl-title">📞 연락이 필요해요</div>`;
+    needContact.forEach(it=>{
+      const d = ago(it.p.lastContact);
+      html += `<div class="tl-row" onclick="openDetail(${it.p.id})">
+        <div class="tl-av" style="background:${REL[it.p.rel].col}">${esc((it.p.name||'?').charAt(0))}</div>
+        <div class="tl-info">
+          <div class="tl-name">${esc(it.p.name)}</div>
+          <div class="tl-sub">${d!==null?d+'일 전 연락':'연락 기록 없음'}</div>
+        </div>
+        <button class="tl-done" onclick="event.stopPropagation();markContact(${it.p.id});renderTodayFull()">완료</button>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  /* 오늘 일정 */
+  if(todayScheds.length){
+    html += `<div class="tl-section">
+      <div class="tl-title">📅 오늘 일정</div>`;
+    todayScheds.slice(0,3).forEach(s=>{
+      const person = s.personId ? D.people.find(p=>p.id===s.personId) : null;
+      html += `<div class="tl-row" onclick="document.querySelector('.nitem[data-v=cal]').click()">
+        <div class="tl-time">${s.time||'—'}</div>
+        <div class="tl-info">
+          <div class="tl-name">${esc(s.title)}</div>
+          ${person?`<div class="tl-sub">👤 ${esc(person.name)}</div>`:''}
+        </div>
+        <span class="tl-arr">›</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  /* 전부 없을 때 */
+  if(!html && !hero){
+    html = `<div class="tl-empty">
+      <div class="tl-empty-ic">🎉</div>
+      <div class="tl-empty-msg">오늘 할 일이 없어요<br>인맥을 추가하면 관리가 시작돼요</div>
+      <button class="btn btn-primary" onclick="openForm()" style="margin:0 24px">＋ 인맥 추가하기</button>
+    </div>`;
+  }
+
+  box.innerHTML = html;
 }
+
+function renderTodayDash(){
+  /* refresh()에서 호출 — 현재 탭이 오늘이면 풀뷰 갱신 */
+  const activeTab = document.querySelector('.nitem.on');
+  if(activeTab && activeTab.dataset.v==='today') renderTodayFull();
+}
+
+function renderTempSummary(){ /* 삭제됨 — renderTodayFull로 통합 */ }
 
 /* ─── 고객 유형별 기본 알림 주기 ─── */
 const DEFAULT_THR = { customer:30, friend:15, prospect:7 };
